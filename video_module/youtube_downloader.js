@@ -11,7 +11,7 @@ const frameProcessor = require('./frame_processor');
 const properties = {
     interval: 4,
     startSeconds: 10,
-    maxSeconds: 300
+    maxSeconds: 150
 };
 
 function generateIntervalArray(){
@@ -126,12 +126,14 @@ const testVideoDir = testDir + '/video';
 //TODO: add multiple queries on same video
 //TODO: handle all errors
 
+
 getFrames(testDir, testVideoDir + '/video.mp4', generateIntervalArray(), (relevantFrames) => {
     //console.log("Result ", relevantFrames);
     frameProcessor.processFrames(relevantFrames, (res) => {
         console.log("Result ", res);
     });
 });
+
 
 
 /*

@@ -2,12 +2,13 @@
 
 const fs = require('fs');
 const limit = require('simple-rate-limiter');
-const request = limit(require('request')).to(10).per(1000);
+const request = limit(require('request')).to(9).per(5000);
 const secrets = require('./secrets.js');
 const easyimg = require('easyimage');
 
 const picWidth = 1280;
 const picHeight = 720;
+const TOLERATED_VERIFY_CONFIDENCE = 0.5;
 
 const diacriticsRemovalMap = [
     {'base':'A', 'letters':/[\u0041\u24B6\uFF21\u00C0\u00C1\u00C2\u1EA6\u1EA4\u1EAA\u1EA8\u00C3\u0100\u0102\u1EB0\u1EAE\u1EB4\u1EB2\u0226\u01E0\u00C4\u01DE\u1EA2\u00C5\u01FA\u01CD\u0200\u0202\u1EA0\u1EAC\u1EB6\u1E00\u0104\u023A\u2C6F]/g},
@@ -96,6 +97,36 @@ const diacriticsRemovalMap = [
     {'base':'z','letters':/[\u007A\u24E9\uFF5A\u017A\u1E91\u017C\u017E\u1E93\u1E95\u01B6\u0225\u0240\u2C6C\uA763]/g}
 ];
 
+function faceDetectLocal(imagePath, cb){
+    let file = fs.createReadStream(imagePath);
+    const options = {
+        url : 'https://eastus2.api.cognitive.microsoft.com/face/v1.0/detect?returnFaceId=true&returnFaceLandmarks=false',
+        headers: {
+            'Content-Type' : 'application/octet-stream',
+            'Ocp-Apim-Subscription-Key' : secrets.keys.face
+        },
+        body : file,
+        encoding : null,
+        method: 'POST'
+    };
+    request(options, cb);
+}
+
+function faceDetectUrl(imageUrl, cb){
+    const options = {
+        url : 'https://eastus2.api.cognitive.microsoft.com/face/v1.0/detect?returnFaceId=true&returnFaceLandmarks=false',
+        headers: {
+            'Ocp-Apim-Subscription-Key' : secrets.keys.face
+        },
+        json : true,
+        body : {
+            url : imageUrl
+        },
+        method: 'POST'
+    };
+    request(options, cb);
+}
+
 module.exports = {
 
     //callback (err, responsecode, responsebody)
@@ -166,18 +197,71 @@ module.exports = {
         request(options, cb);
     },
 
-    faceDetect : function(imagePath, cb){
-        const formData = {
-            file : fs.createReadStream(imagePath)
-        };
-        const options = {
-            url : 'https://eastus2.api.cognitive.microsoft.com/face/v1.0/detect?returnFaceId=true&returnFaceLandmarks=false',
-            headers: {
+    faceDetectLocal : faceDetectLocal,
 
-            },
+    faceDetectUrl : faceDetectUrl,
 
-        }
-    }
+    //cb (isMatch)
+    faceVerify : function(imagePath, imageUrl, cb){
+        let returnedTrue = false;
+        faceDetectLocal(imagePath, (err, responseCode, responseBody) => {
+            if(err){
+                console.log("error : ", err);
+                return;
+            }
+            let face1Body = JSON.parse(responseBody.toString('utf-8'));
+            console.log('faceDetectLocal responseBody: ', face1Body);
+            for(let i = 0; i < face1Body.length; i++){
+                let face1Id = face1Body[i]['faceId'];
+                faceDetectUrl(imageUrl, (err2, responseCode2, face2Body) => {
+                    if(err2){
+                        console.log("error : ", err2);
+                        return;
+                    }
+                    console.log('faceDetectUrl responseBody: ', face2Body);
+                    if(!face2Body || face2Body.length === 0){
+                        cb(false);
+                    }
+                    for(let j = 0; j < face2Body.length; j++){
+                        let face2Id = face2Body[j]['faceId'];
+                        const options = {
+                            url : 'https://eastus2.api.cognitive.microsoft.com/face/v1.0/verify',
+                            headers: {
+                                'Ocp-Apim-Subscription-Key' : secrets.keys.face
+                            },
+                            json : true,
+                            body : {
+                                faceId1 : face1Id,
+                                faceId2 : face2Id
+                            },
+                            method: 'POST'
+                        };
+                        let expectedCallbackCount = face1Body.length * face2Body.length;
+                        let callbackCount = 0;
+                        request(options, (err3, responseCode3, verifyBody) => {
+                            if(err3){
+                                console.log("error : ", err3);
+                                return;
+                            }
+                            console.log('faceVerify responseBody: ', verifyBody);
+                            callbackCount++;
+                            let confidence = Number(verifyBody['confidence']);
+                            if(!returnedTrue && confidence >= TOLERATED_VERIFY_CONFIDENCE){
+                                returnedTrue = true;
+                                cb(true);
+                            }
+                            if(callbackCount === expectedCallbackCount && !returnedTrue){
+                                cb(false);
+                            }
+                        });
+                    }
+                });
+            }
+            if(!face1Body || face1Body.length === 0){
+                cb(false);
+            }
+        })
+    },
 
     removeDiacritics : function(str){
         for(let i = 0; i < diacriticsRemovalMap.length; i++) {

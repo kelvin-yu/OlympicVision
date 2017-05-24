@@ -175,7 +175,7 @@ function getAllAthletesFromStartList(startListFrame, cb){
     });
 }
 
-const EDIT_DISTANCE_DIVISION = 4;
+const EDIT_DISTANCE_DIVISION = 5;
 //approximate location of name tag
 const leftX = 200;
 const leftY = 550;
@@ -196,7 +196,9 @@ function findAthleteInFrame(athletes, frame){
                 let minAthlete = null;
                 let secondMinAthleteEditDistance = 1000;
                 let secondMinAthlete = null;
-                for(let athlete in athletes){
+                for(let i = 0; i < athletes.length; i++){
+                    let athlete = athletes[i];
+                    if(!athlete) continue;
                     let athleteNameSplit = athlete.getName().split(" ");
                     for(let i = 0; i < athleteNameSplit.length; i++){
                         let editDistance = minimumEditDistance(body, athleteNameSplit[i]);
@@ -213,15 +215,46 @@ function findAthleteInFrame(athletes, frame){
                     }
                 }
 
-                if(minEditAthleteDistance <= Math.floor(athlete.getName().length() / EDIT_DISTANCE_DIVISION)){
+                let returnedTrue = false;
+                if(minEditAthleteDistance <= Math.floor(minAthlete.getName().length / EDIT_DISTANCE_DIVISION)){
+                    console.log('here');
                     resolve(minAthlete);
-                    return;
                 }
                 else{
-
+                    let expectedCallbackCount = 0;
+                    if(minAthlete) expectedCallbackCount += minAthlete.getImages().length;
+                    if(secondMinAthlete) expectedCallbackCount += secondMinAthlete.getImages().length;
+                    let callbackCount = 0;
+                    console.log('expectedcallbackcount count for ', frame.getTime(), ': ', expectedCallbackCount);
+                    if(minAthlete){
+                        for(let i = 0; i < minAthlete.getImages().length; i++){
+                            utils.faceVerify(frame.getImagePath(), minAthlete.getImages()[i], (isMatch) => {
+                                callbackCount++;
+                                if(!returnedTrue && isMatch){
+                                    returnedTrue = true;
+                                    resolve(minAthlete);
+                                }
+                                if(callbackCount === expectedCallbackCount && !returnedTrue){
+                                    resolve(null);
+                                }
+                            });
+                        }
+                    }
+                    if(secondMinAthlete){
+                        for(let i = 0; i < secondMinAthlete.getImages().length; i++){
+                            utils.faceVerify(frame.getImagePath(), secondMinAthlete.getImages()[i], (isMatch) => {
+                                callbackCount++;
+                                if(!returnedTrue && isMatch){
+                                    returnedTrue = true;
+                                    resolve(secondMinAthlete);
+                                }
+                                if(callbackCount === expectedCallbackCount && !returnedTrue){
+                                    resolve(null);
+                                }
+                            });
+                        }
+                    }
                 }
-
-                resolve(null);
             });
         });
     });
@@ -236,10 +269,20 @@ exports.processFrames = function processFrames(relevantFrames, cb){
             callbacks.push(findAthleteInFrame(athletes, frame));
         }
         Promise.all(callbacks).then((res) => {
+            //console.log("res: ", res);
             for(let i = 0; i < res.length; i++){
-                relevantFrames[i].setAthleteInFrame(res[i]);
+                relevantFrames[lastStartListFrame+1+i].setAthleteInFrame(res[i]);
+                if(res[i] !== null){
+                    console.log('found athlete ', res[i].getName(), ' at frame seconds: ', relevantFrames[lastStartListFrame+1+i].getTime());
+                }
+                else{
+                    console.log('found no athlete at frame: ', relevantFrames[lastStartListFrame+1+i]. getTime());
+                }
             }
             cb(relevantFrames);
+        })
+        .catch((err) => {
+            console.log("error: ", err);
         });
     });
 };
