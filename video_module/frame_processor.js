@@ -25,7 +25,7 @@ function containsWord(body, word){
 function editDistance(str1, str2){
     let dp = new Array(str1.length+1);
     for(let i = 0; i < dp.length; i++){
-        dp[i] = new Array(str2.length+1);
+        dp[i] = new Array(str2.length+1).fill(1000);
     }
 
     for(let i = 0; i <= str1.length; i++){
@@ -80,7 +80,8 @@ function findBeginAndEndStartListIndex(frames){
         }
         else if(found){
             end = i-1;
-            break;
+            if(i + 1 < frames.length && !containsWord(frames[i+1].getData(), 'start'))
+                break;
         }
     }
     if(!found){
@@ -89,30 +90,30 @@ function findBeginAndEndStartListIndex(frames){
     let res = {};
     res['begin'] = begin;
     res['end'] = end;
-    console.log("begin and end: ", res);
     return res;
 }
 
-function findStartList(frames) {
+function findStartList(frames, logger) {
     let beginAndEndIndex = findBeginAndEndStartListIndex(frames);
     if(!beginAndEndIndex) return false;
     let begin = beginAndEndIndex['begin'];
     let end = beginAndEndIndex['end'];
-    //console.log("Begin: ", begin, " End: ", end);
     let startListFrame = frames[Math.floor((end+begin)/2)];
-    console.log("Startlist frame: ", startListFrame.getTime());
+    logger.info("Found start frame at : ", startListFrame.getTime());
+    logger.debug('First start frame occurrence %d, last start frame occurrence %d', frames[begin].getTime(), frames[end].getTime());
     return startListFrame;
 }
 
-function getAllAthletesFromStartList(startListFrame, cb){
+function getAllAthletesFromStartList(startListFrame, logger, cb){
     let frameData = startListFrame.getData();
-    //Location of first word
+
     let startLoc = containsWord(frameData, "start");
-    console.log("Startloc" , startLoc);
+    logger.debug("Found word 'start' in startlist frame at: " , startLoc);
+
     let leftX = Number(startLoc.split(',')[0]);
     let leftY = Number(startLoc.split(',')[1]) + Number(startLoc.split(',')[3]);
     let regions = frameData['regions'];
-    console.log("Regions: ", regions);
+    logger.debug("Startlist frame regions: ", regions);
     let rightX = leftX;
     let rightY = leftY;
     for(let i = 0; i < regions.length; i++){
@@ -129,16 +130,19 @@ function getAllAthletesFromStartList(startListFrame, cb){
             }
         }
     }
+    logger.info('Cropping start list frame at leftX: %d, leftY: %d, rightX: %d, rightY: %d', leftX, leftY, rightX, rightY);
     utils.crop(startListFrame, startListFrame.getDir() + '/startlist.png', leftX, leftY, rightX, rightY, (image) => {
-        console.log("Query startlist");
-        utils.queryOcr(startListFrame.getDir() + '/startlist.png', (err, responseCode, responseBody) => {
+        console.log("Begin OCR of startlist");
+        utils.queryOcr(startListFrame.getDir() + '/startlist.png', (err, response, responseBody) => {
             if(err){
-                console.log("Query startlist error: ", err);
+                console.log("OCR of startlist error: ", err);
+                return;
             }
             let body = JSON.parse(responseBody);
             let callbackCount = 0;
             let expectedCallbackCount = 0;
-            let res = [];
+            let athletes = [];
+            let athleteCount = 0;
             if(body['regions']){
                 for(let i = 0; i < body['regions'].length; i++){
                     expectedCallbackCount += body['regions'][i]['lines'].length;
@@ -147,29 +151,38 @@ function getAllAthletesFromStartList(startListFrame, cb){
                     for(let j = 0; j < body['regions'][i]['lines'].length; j++){
                         let line = "";
                         for(let k = 0; k < body['regions'][i]['lines'][j]['words'].length; k++){
-                            line += (" " + body['regions'][i]['lines'][j]['words'][k].text);
+                            if(line !== '')
+                                line += (" " + body['regions'][i]['lines'][j]['words'][k].text);
+                            else
+                                line += body['regions'][i]['lines'][j]['words'][k].text;
                         }
-                        console.log("count here ", line);
+                        logger.debug('Checking if %s is an athlete', line);
                         athleteProfiler.getAthleteProfile(line, (err, athlete) => {
                             callbackCount++;
                             if(err){
-                                console.log("Error when profiling: ", line);
-                                console.log("err: ", err);
+                                logger.error("Error when getting profile for ", line);
                             }
-                            //console.log("Callback count: ", callbackCount, " Athlete ", athlete);
                             if(athlete){
-                                res.push(athlete);
+                                logger.info('%s is an athlete', line);
+                                logger.debug('Athlete profile: ', athlete);
+                                athletes.push(athlete);
+                                athleteCount++;
                             }
                             if(callbackCount === expectedCallbackCount){
-                                cb(res);
+                                logger.info('Found %d athletes', athleteCount);
+                                logger.info('Athlete names: ', athletes.map((athlete) => {
+                                    return athlete.getName();
+                                }));
+                                logger.debug("athletes: ", athletes);
+                                cb(athletes);
                             }
                         });
                     }
                 }
-
             }
             else{
-                console.log("Something weird happened");
+                logger.warn('Somehow no text was found for start list frame', startListFrame);
+                cb(athletes);
             }
         });
     });
@@ -183,13 +196,14 @@ const rightX = 1100;
 const rightY = 675;
 
 //Returns a promise for easy usage
-function findAthleteInFrame(athletes, frame){
+function findAthleteInFrame(athletes, frame, logger){
     return new Promise((resolve, reject) => {
-        utils.crop(frame, frame.getDir() + '/cropped_' + frame.getTime(), leftX, leftY, rightX, rightY, (image) => {
-            utils.queryOcr(frame.getDir() + '/cropped_' + frame.getTime(), (err, responseCode, responseBody) => {
+        utils.crop(frame, frame.getDir() + '/cropped_' + frame.getTime() + '.png', leftX, leftY, rightX, rightY, (image) => {
+            utils.queryOcr(frame.getDir() + '/cropped_' + frame.getTime() + '.png', (err, responseCode, responseBody) => {
                 if(err){
-                    console.log("getAthleteFromFrame error", err);
+                    logger.error('Error finding athlete in frame: ', err);
                     reject(err);
+                    return;
                 }
                 let body = JSON.parse(responseBody);
                 let minEditAthleteDistance = 1000;
@@ -199,7 +213,9 @@ function findAthleteInFrame(athletes, frame){
                 for(let i = 0; i < athletes.length; i++){
                     let athlete = athletes[i];
                     if(!athlete) continue;
-                    let athleteNameSplit = athlete.getName().split(" ");
+                    let athleteNameSplit = [athlete.getName()].concat(athlete.getName().split(" ")).concat([athlete.getOcrName()]).filter((name) => {
+                        return (name !== ' ' && name !== '');
+                    });
                     for(let i = 0; i < athleteNameSplit.length; i++){
                         let editDistance = minimumEditDistance(body, athleteNameSplit[i]);
                         if(editDistance <= minEditAthleteDistance){
@@ -214,10 +230,12 @@ function findAthleteInFrame(athletes, frame){
                         }
                     }
                 }
+                logger.debug('minEditDistanceAthlete: %s in frame at %d seconds', minAthlete.getName(), frame.getTime());
+                logger.debug('secondMinEditDistanceAthlete: %s in frame at %d seconds', secondMinAthlete.getName(), frame.getTime());
 
                 let returnedTrue = false;
                 if(minEditAthleteDistance <= Math.floor(minAthlete.getName().length / EDIT_DISTANCE_DIVISION)){
-                    console.log('here');
+                    logger.info('Athlete at %d seconds is %s', frame.getTime(), minAthlete.getName());
                     resolve(minAthlete);
                 }
                 else{
@@ -225,16 +243,17 @@ function findAthleteInFrame(athletes, frame){
                     if(minAthlete) expectedCallbackCount += minAthlete.getImages().length;
                     if(secondMinAthlete) expectedCallbackCount += secondMinAthlete.getImages().length;
                     let callbackCount = 0;
-                    console.log('expectedcallbackcount count for ', frame.getTime(), ': ', expectedCallbackCount);
                     if(minAthlete){
                         for(let i = 0; i < minAthlete.getImages().length; i++){
                             utils.faceVerify(frame.getImagePath(), minAthlete.getImages()[i], (isMatch) => {
                                 callbackCount++;
                                 if(!returnedTrue && isMatch){
                                     returnedTrue = true;
+                                    logger.info('Athlete at %d seconds is %s', frame.getTime(), minAthlete.getName());
                                     resolve(minAthlete);
                                 }
                                 if(callbackCount === expectedCallbackCount && !returnedTrue){
+                                    logger.info('No athlete found at %d seconds', frame.getTime());
                                     resolve(null);
                                 }
                             });
@@ -246,9 +265,11 @@ function findAthleteInFrame(athletes, frame){
                                 callbackCount++;
                                 if(!returnedTrue && isMatch){
                                     returnedTrue = true;
+                                    logger.info('Athlete at %d seconds is %s', frame.getTime(), secondMinAthlete.getName());
                                     resolve(secondMinAthlete);
                                 }
                                 if(callbackCount === expectedCallbackCount && !returnedTrue){
+                                    logger.info('No athlete found at %d seconds', frame.getTime());
                                     resolve(null);
                                 }
                             });
@@ -260,31 +281,29 @@ function findAthleteInFrame(athletes, frame){
     });
 }
 
-exports.processFrames = function processFrames(relevantFrames, cb){
-    getAllAthletesFromStartList(findStartList(relevantFrames), (athletes) => {
+exports.processFrames = function processFrames(relevantFrames, logger, cb){
+    getAllAthletesFromStartList(findStartList(relevantFrames, logger), logger,  (athletes) => {
         let callbacks = [];
         let lastStartListFrame = findBeginAndEndStartListIndex(relevantFrames)['end'];
         for(let i = lastStartListFrame+1; i < relevantFrames.length; i++){
             let frame = relevantFrames[i];
-            callbacks.push(findAthleteInFrame(athletes, frame));
+            callbacks.push(findAthleteInFrame(athletes, frame, logger));
         }
         Promise.all(callbacks).then((res) => {
-            //console.log("res: ", res);
+            logger.info('Processed frame results');
             for(let i = 0; i < res.length; i++){
                 relevantFrames[lastStartListFrame+1+i].setAthleteInFrame(res[i]);
                 if(res[i] !== null){
-                    console.log('found athlete ', res[i].getName(), ' at frame seconds: ', relevantFrames[lastStartListFrame+1+i].getTime());
+                    logger.info('Athlete at %d seconds is %s', relevantFrames[lastStartListFrame+1+i].getTime(), res[i].getName());
                 }
                 else{
-                    console.log('found no athlete at frame: ', relevantFrames[lastStartListFrame+1+i]. getTime());
+                    logger.info('No athlete found at %d seconds', relevantFrames[lastStartListFrame+1+i]. getTime());
                 }
             }
             cb(relevantFrames);
         })
         .catch((err) => {
-            console.log("error: ", err);
+            logger.error('Error processing frames: ', err);
         });
     });
 };
-
-//200, 550  -    1100, 675

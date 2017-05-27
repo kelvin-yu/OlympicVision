@@ -6,8 +6,8 @@ const request = limit(require('request')).to(9).per(5000);
 const secrets = require('./secrets.js');
 const easyimg = require('easyimage');
 
-const picWidth = 1280;
-const picHeight = 720;
+const picWidth = 1920;
+const picHeight = 1080;
 const TOLERATED_VERIFY_CONFIDENCE = 0.5;
 
 const diacriticsRemovalMap = [
@@ -211,6 +211,10 @@ module.exports = {
             }
             let face1Body = JSON.parse(responseBody.toString('utf-8'));
             console.log('faceDetectLocal responseBody: ', face1Body);
+            if(!face1Body || face1Body.length === 0){
+                returnedTrue = true;
+                cb(false);
+            }
             for(let i = 0; i < face1Body.length; i++){
                 let face1Id = face1Body[i]['faceId'];
                 faceDetectUrl(imageUrl, (err2, responseCode2, face2Body) => {
@@ -220,6 +224,7 @@ module.exports = {
                     }
                     console.log('faceDetectUrl responseBody: ', face2Body);
                     if(!face2Body || face2Body.length === 0){
+                        returnedTrue = true;
                         cb(false);
                     }
                     for(let j = 0; j < face2Body.length; j++){
@@ -256,9 +261,6 @@ module.exports = {
                         });
                     }
                 });
-            }
-            if(!face1Body || face1Body.length === 0){
-                cb(false);
             }
         })
     },

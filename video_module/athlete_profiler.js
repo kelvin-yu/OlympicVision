@@ -19,7 +19,7 @@ exports.getAthleteProfile = function getAthleteProfile(line, cb){
                 }
                 //console.log("person: ", person, " bingImageReponseBody", bingImageResponseBody);
                 let images = getAthleteImages(JSON.parse(bingImageResponseBody));
-                let athlete = new Athlete(person, images, getAthleteWikipedia(JSON.parse(bingResponseBody)));
+                let athlete = new Athlete(line, person, images, getAthleteWikipedia(JSON.parse(bingResponseBody)));
                 cb(null, athlete);
             });
         }

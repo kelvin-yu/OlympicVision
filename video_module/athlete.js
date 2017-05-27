@@ -1,9 +1,18 @@
 'use strict';
 
-let Athlete = function(name, images, wikipedia){
+let Athlete = function(ocrName, name, images, wikipedia){
+    this._ocrName = ocrName;
     this._name = name;
     this._images = images;
     this._wikipedia = wikipedia;
+};
+
+Athlete.prototype.getOcrName = function (){
+    return this._ocrName;
+};
+
+Athlete.prototype.setOcrName = function (ocrName) {
+    this._ocrName = ocrName;
 };
 
 Athlete.prototype.getName = function(){
