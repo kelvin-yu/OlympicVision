@@ -3,6 +3,12 @@ const fs = require('fs');
 const utils = require('./utils.js');
 const athleteProfiler = require('./athlete_profiler.js');
 
+const Promise = require('bluebird');
+
+Promise.config({
+    cancellation: true,
+});
+
 function containsWord(body, word){
     if(body['regions']){
         for(let i = 0; i < body['regions'].length; i++){
@@ -83,6 +89,9 @@ function findBeginAndEndStartListIndex(frames){
             if(i + 1 < frames.length && !containsWord(frames[i+1].getData(), 'start'))
                 break;
         }
+    }
+    if(end === -1){
+        end = frames.length - 1;
     }
     if(!found){
         return false;
@@ -189,11 +198,12 @@ function getAllAthletesFromStartList(startListFrame, logger, cb){
 }
 
 const EDIT_DISTANCE_DIVISION = 5;
+const FACE_EDIT_DISTANCE_DIVISION = 3;
 //approximate location of name tag
-const leftX = 200;
-const leftY = 550;
-const rightX = 1100;
-const rightY = 675;
+const leftX = 330;
+const leftY = 880;
+const rightX = 1600;
+const rightY = 1000;
 
 //Returns a promise for easy usage
 function findAthleteInFrame(athletes, frame, logger){
@@ -233,48 +243,43 @@ function findAthleteInFrame(athletes, frame, logger){
                 logger.debug('minEditDistanceAthlete: %s in frame at %d seconds', minAthlete.getName(), frame.getTime());
                 logger.debug('secondMinEditDistanceAthlete: %s in frame at %d seconds', secondMinAthlete.getName(), frame.getTime());
 
-                let returnedTrue = false;
+                console.log('distance: ', minEditAthleteDistance);
+
                 if(minEditAthleteDistance <= Math.floor(minAthlete.getName().length / EDIT_DISTANCE_DIVISION)){
                     logger.info('Athlete at %d seconds is %s', frame.getTime(), minAthlete.getName());
                     resolve(minAthlete);
                 }
+                else if(minAthlete && minEditAthleteDistance <= Math.floor(minAthlete.getName().length / FACE_EDIT_DISTANCE_DIVISION)){
+                    let p = utils.faceVerify(frame.getImagePath(), minAthlete).then((result) => {
+                        if(result){
+                            logger.info('Athlete at %d seconds is %s', frame.getTime(), minAthlete.getName());
+                            resolve(minAthlete);
+                            p.cancel();
+                        }
+                        else if(secondMinAthlete && secondMinAthlete <= Math.floor(secondMinAthlete.getName().length / FACE_EDIT_DISTANCE_DIVISION)){
+                            return utils.faceVerify(frame.getImagePath(), secondMinAthlete);
+                        }
+                        else{
+                            logger.info('No athlete found at %d seconds', frame.getTime());
+                            resolve(null);
+                            p.cancel();
+                        }
+                    }).then((result) => {
+                        if(result){
+                            logger.info('Athlete at %d seconds is %s', frame.getTime(), secondMinAthlete.getName());
+                            resolve(secondMinAthlete);
+                        }
+                        else{
+                            logger.info('No athlete found at %d seconds', frame.getTime());
+                            resolve(null);
+                        }
+                    }).catch((err) => {
+                        reject(err);
+                    });
+                }
                 else{
-                    let expectedCallbackCount = 0;
-                    if(minAthlete) expectedCallbackCount += minAthlete.getImages().length;
-                    if(secondMinAthlete) expectedCallbackCount += secondMinAthlete.getImages().length;
-                    let callbackCount = 0;
-                    if(minAthlete){
-                        for(let i = 0; i < minAthlete.getImages().length; i++){
-                            utils.faceVerify(frame.getImagePath(), minAthlete.getImages()[i], (isMatch) => {
-                                callbackCount++;
-                                if(!returnedTrue && isMatch){
-                                    returnedTrue = true;
-                                    logger.info('Athlete at %d seconds is %s', frame.getTime(), minAthlete.getName());
-                                    resolve(minAthlete);
-                                }
-                                if(callbackCount === expectedCallbackCount && !returnedTrue){
-                                    logger.info('No athlete found at %d seconds', frame.getTime());
-                                    resolve(null);
-                                }
-                            });
-                        }
-                    }
-                    if(secondMinAthlete){
-                        for(let i = 0; i < secondMinAthlete.getImages().length; i++){
-                            utils.faceVerify(frame.getImagePath(), secondMinAthlete.getImages()[i], (isMatch) => {
-                                callbackCount++;
-                                if(!returnedTrue && isMatch){
-                                    returnedTrue = true;
-                                    logger.info('Athlete at %d seconds is %s', frame.getTime(), secondMinAthlete.getName());
-                                    resolve(secondMinAthlete);
-                                }
-                                if(callbackCount === expectedCallbackCount && !returnedTrue){
-                                    logger.info('No athlete found at %d seconds', frame.getTime());
-                                    resolve(null);
-                                }
-                            });
-                        }
-                    }
+                    logger.info('No athlete found at %d seconds', frame.getTime());
+                    resolve(null);
                 }
             });
         });

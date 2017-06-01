@@ -7,8 +7,10 @@ const utils = require('./utils.js');
 const Frame = require('./frame.js');
 const frameProcessor = require('./frame_processor');
 
+const Promise = require('bluebird');
+
 const properties = {
-    interval: 2,
+    interval: 4,
     startSeconds: 10,
     maxSeconds: 150,
     videoQuality : 22

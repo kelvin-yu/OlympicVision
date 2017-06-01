@@ -23,6 +23,7 @@ Athlete.prototype.setName = function(name){
     this._name = name;
 };
 
+//images : {path, faceIds}
 Athlete.prototype.getImages = function(){
     return this._images;
 };

@@ -3,6 +3,8 @@ const fs = require('fs');
 const youtubeDownloader = require('./youtube_downloader.js');
 const frameProcessor = require('./frame_processor');
 
+const Promise = require('bluebird');
+
 //TODO move this to another file
 function processVideo(url){
     const urlId =  url.substring(url.lastIndexOf('=') + 1, url.length);
