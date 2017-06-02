@@ -5,7 +5,6 @@ const ytdl = require('ytdl-core');
 const ffmpeg = require('fluent-ffmpeg');
 const utils = require('./utils.js');
 const Frame = require('./frame.js');
-const frameProcessor = require('./frame_processor');
 
 const Promise = require('bluebird');
 

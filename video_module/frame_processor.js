@@ -243,8 +243,6 @@ function findAthleteInFrame(athletes, frame, logger){
                 logger.debug('minEditDistanceAthlete: %s in frame at %d seconds', minAthlete.getName(), frame.getTime());
                 logger.debug('secondMinEditDistanceAthlete: %s in frame at %d seconds', secondMinAthlete.getName(), frame.getTime());
 
-                console.log('distance: ', minEditAthleteDistance);
-
                 if(minEditAthleteDistance <= Math.floor(minAthlete.getName().length / EDIT_DISTANCE_DIVISION)){
                     logger.info('Athlete at %d seconds is %s', frame.getTime(), minAthlete.getName());
                     resolve(minAthlete);

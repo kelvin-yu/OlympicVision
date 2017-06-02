@@ -2,6 +2,7 @@ const winston = require('winston');
 const fs = require('fs');
 const youtubeDownloader = require('./youtube_downloader.js');
 const frameProcessor = require('./frame_processor');
+const moment = require('moment');
 
 const Promise = require('bluebird');
 
@@ -16,15 +17,28 @@ function processVideo(url){
     //logger.remove(winston.transports.Console);
     logger.add(winston.transports.File, {
         name : 'info-file',
-        filename: './logs/' + loggerId,
-        json: false,
-        level: 'info'
+        filename : './logs/' + loggerId,
+        json : false,
+        level : 'info',
+        formatter : function(options) {
+            // Return string will be passed to logger.
+            return moment().format("MM/DD/YYYY hh:mm:ss") + '-' +
+                options.level.toUpperCase() + ' ' +
+                (options.message ? options.message : '') +
+                (options.meta && Object.keys(options.meta).length ? '\n' + JSON.stringify(options.meta, null, 2) : '');
+        }
     });
     logger.add(winston.transports.File, {
         name : 'debug-file',
-        filename: './logs/' + loggerId + '_debug',
-        json: false,
-        level: 'debug'
+        filename : './logs/' + loggerId + '_debug',
+        json : false,
+        level : 'debug',
+        formatter : function(options) {
+            // Return string will be passed to logger.
+            return options.level.toUpperCase() + ' ' +
+                (options.message ? options.message : '') +
+                (options.meta && Object.keys(options.meta).length ? '\n' + JSON.stringify(options.meta, null, 2) : '');
+        }
      });
 
     // set up directory structure

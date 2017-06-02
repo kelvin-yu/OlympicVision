@@ -50,7 +50,7 @@ function getAthleteImagesAndFaceIds(body){
             let url = body['value'][i]['contentUrl'];
             console.log('url: ', url);
             images.push({url : url, faceIds : []});
-            promises.push(utils.faceDetectUrlPromise(url));
+            promises.push(utils.faceDetectUrl(url));
         }
         return new Promise((resolve, reject) => {
             Promise.all(promises.map((promise) => {
