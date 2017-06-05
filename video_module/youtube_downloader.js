@@ -11,7 +11,7 @@ const Promise = require('bluebird');
 
 function generateIntervalArray(){
     let arr = [];
-    for(let i = config.Properties.StartSecond; i <= config.Properties.MaxSecond; i += config.Properties.FrameInterval){
+    for(let i = config.START_SECOND; i <= config.MAX_SECOND; i += config.FRAME_INTERVAL){
         arr.push(i);
     }
     return arr;
@@ -45,7 +45,7 @@ exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, logger){
 
     //Download youtube video
     try{
-        let video = ytdl(url, { quality: config.Properties.VideoQuality});
+        let video = ytdl(url, { quality: config.VIDEO_QUALITY});
         video.pipe(fs.createWriteStream(videodir + '/video.mp4'));
         let percent = 0;
         video.on('progress', (chunkLength, downloaded, total) => {

@@ -6,7 +6,7 @@ const config = require('./config.js');
 const easyimg = require('easyimage');
 const _request = require('request');
 const RateLimiter = require('limiter').RateLimiter;
-let limiter = new RateLimiter(config.Properties.RateLimiterSeconds, 'second');
+let limiter = new RateLimiter(config.REQUESTS_PER_SECOND, 'second');
 const Promise = require('bluebird');
 
 //TODO refactor to remove all callback based functions, use promises only
@@ -27,7 +27,7 @@ function request(options, cb){
                         setTimeout(function(){
                             limiter.tokenBucket.tokensPerInterval = tokensPerInterval;
                             backingOff = false;
-                        }, config.Properties.BACKOFF_TIME);
+                        }, config.BACKOFF_TIME);
                     }
                     repeat();
                 }
@@ -119,8 +119,8 @@ exports.crop = function crop(frame, savePath, leftX, leftY, rightX, rightY){
         easyimg.crop({
             src: frame.getImagePath(),
             dst: savePath,
-            x : centerX -(config.Properties.FramePicWidth/2),
-            y : centerY - (config.Properties.FramePicHeight/2),
+            x : centerX -(config.FRAME_PIC_WIDTH/2),
+            y : centerY - (config.FRAME_PIC_HEIGHT/2),
             cropwidth : width + 10,
             cropheight : height + 10
         }).then(
@@ -198,7 +198,7 @@ exports.faceVerify = function faceVerify(imagePath, athlete){
             })).each((res) => {
                if(res.isFulfilled()){
                     let confidence = Number(res.value()['confidence']);
-                    if(confidence >= config.Properties.TOLERATED_VERIFY_CONFIDENCE){
+                    if(confidence >= config.TOLERATED_VERIFY_CONFIDENCE){
                         result = true;
                     }
                }

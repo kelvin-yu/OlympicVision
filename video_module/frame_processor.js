@@ -201,7 +201,7 @@ function getAllAthletesFromStartList(startListFrame, logger){
 //Returns a promise for easy usage
 function findAthleteInFrame(athletes, frame, logger){
     return new Promise((resolve, reject) => {
-        utils.crop(frame, frame.getDir() + '/cropped_' + frame.getTime() + '.png', config.Properties.LeftX, config.Properties.LeftY, config.Properties.RightX, config.Properties.RightY).then((image) => {
+        utils.crop(frame, frame.getDir() + '/cropped_' + frame.getTime() + '.png', config.NAME_TAG_LOC.LEFTX, config.NAME_TAG_LOC.LEFTY, config.NAME_TAG_LOC.RIGHTX, config.NAME_TAG_LOC.RIGHTY).then((image) => {
             return utils.queryOcr(frame.getDir() + '/cropped_' + frame.getTime() + '.png');
         }).then((responseBody) => {
             let body = JSON.parse(responseBody);
@@ -230,12 +230,12 @@ function findAthleteInFrame(athletes, frame, logger){
                 }
             }
             //Primary match using OCR
-            if (minEditAthleteDistance <= Math.floor(minAthlete.getName().length / config.Properties.EDIT_DISTANCE_DIVISION)) {
+            if (minEditAthleteDistance <= Math.floor(minAthlete.getName().length / config.EDIT_DISTANCE_DIVISION)) {
                 logger.info('Athlete at %d seconds is %s', frame.getTime(), minAthlete.getName());
                 resolve(minAthlete);
             }
             //Secondary match using face recognition
-            else if (minAthlete && minEditAthleteDistance <= Math.floor(minAthlete.getName().length / config.Properties.FACE_EDIT_DISTANCE_DIVISION)) {
+            else if (minAthlete && minEditAthleteDistance <= Math.floor(minAthlete.getName().length / config.FACE_EDIT_DISTANCE_DIVISION)) {
                 logger.info('edit distance: ', minEditAthleteDistance, ' athlete name ', minAthlete.getName(), ' is very similar to ', body);
                 let p = utils.faceVerify(frame.getImagePath(), minAthlete).then((result) => {
                     if (result) {
@@ -243,7 +243,7 @@ function findAthleteInFrame(athletes, frame, logger){
                         resolve(minAthlete);
                         p.cancel();
                     }
-                    else if (secondMinAthlete && secondMinAthleteEditDistance <= Math.floor(secondMinAthlete.getName().length / config.Properties.FACE_EDIT_DISTANCE_DIVISION)) {
+                    else if (secondMinAthlete && secondMinAthleteEditDistance <= Math.floor(secondMinAthlete.getName().length / config.FACE_EDIT_DISTANCE_DIVISION)) {
                         logger.info('edit distance: ', secondMinAthleteEditDistance, ' athlete name ', secondMinAthlete.getName(), ' is very similar to ');
                         return utils.faceVerify(frame.getImagePath(), secondMinAthlete);
                     }
