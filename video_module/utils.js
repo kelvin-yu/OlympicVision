@@ -91,7 +91,7 @@ exports.faceDetectUrl = function faceDetectUrl(imageUrl){
 };
 
 //callback (err, responsecode, responsebody)
-exports.queryOcr = function queryOcr(imagePath, cb){
+exports.queryOcr = function queryOcr(imagePath){
     const formData = {
         file : fs.createReadStream(imagePath)
     };
@@ -103,11 +103,11 @@ exports.queryOcr = function queryOcr(imagePath, cb){
         formData : formData,
         method: 'POST'
     };
-    request(options, cb);
+    return requestPromise(options);
 };
 
 //callback (image)
-exports.crop = function crop(frame, savePath, leftX, leftY, rightX, rightY, cb){
+exports.crop = function crop(frame, savePath, leftX, leftY, rightX, rightY){
     /*
     console.log("Start frame leftX ", leftX);
     console.log("Start frame leftY ", leftY);
@@ -119,23 +119,27 @@ exports.crop = function crop(frame, savePath, leftX, leftY, rightX, rightY, cb){
     let width = Math.abs(rightX - leftX);
     let height = Math.abs(leftY - rightY);
 
-    easyimg.crop({
-        src: frame.getImagePath(),
-        dst: savePath,
-        x : centerX -(picWidth/2),
-        y : centerY - (picHeight/2),
-        cropwidth : width + 10,
-        cropheight : height + 10
-    }).then(
-        cb,
-        function(err){
-            console.error("Imagemagick Error ", err);
-        }
-    );
+    return new Promise((resolve, reject) => {
+        easyimg.crop({
+            src: frame.getImagePath(),
+            dst: savePath,
+            x : centerX -(picWidth/2),
+            y : centerY - (picHeight/2),
+            cropwidth : width + 10,
+            cropheight : height + 10
+        }).then(
+            (image) => {
+                resolve(image);
+            },
+            (err) => {
+                reject(err);
+            }
+        );
+    });
 };
 
 //callback (err, responsecode, responsebody)
-exports.bingWebSearch = function bingWebSearch(query, cb){
+exports.bingWebSearch = function bingWebSearch(query){
     console.log('query: ', query);
     const options = {
         url: 'https://api.cognitive.microsoft.com/bing/v5.0/search?q=' + query + '&count=5&offset=0&mkt=en-us&safesearch=Moderate',
@@ -144,10 +148,10 @@ exports.bingWebSearch = function bingWebSearch(query, cb){
         },
         method: 'GET'
     };
-    request(options, cb);
+    return requestPromise(options);
 };
 
-exports.bingImageSearch = function bingImageSearch(query, cb){
+exports.bingImageSearch = function bingImageSearch(query){
     const options = {
         url : 'https://api.cognitive.microsoft.com/bing/v5.0/images/search?q=' + query + '&count=5&offset=0&mkt=en-us&safeSearch=Moderate',
         headers: {
@@ -155,7 +159,7 @@ exports.bingImageSearch = function bingImageSearch(query, cb){
         },
         method: 'GET'
     };
-    request(options, cb);
+    return requestPromise(options);
 };
 
 //cb (isMatch)
@@ -221,7 +225,7 @@ exports.removeDiacritics = function removeDiacritics(str){
         str = str.replace(diacriticsRemovalMap[i].letters, diacriticsRemovalMap[i].base);
     }
     return str;
-}
+};
 
 const diacriticsRemovalMap = [
     {'base':'A', 'letters':/[\u0041\u24B6\uFF21\u00C0\u00C1\u00C2\u1EA6\u1EA4\u1EAA\u1EA8\u00C3\u0100\u0102\u1EB0\u1EAE\u1EB4\u1EB2\u0226\u01E0\u00C4\u01DE\u1EA2\u00C5\u01FA\u01CD\u0200\u0202\u1EA0\u1EAC\u1EB6\u1E00\u0104\u023A\u2C6F]/g},

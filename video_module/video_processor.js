@@ -46,7 +46,6 @@ function processVideo(url){
     const videodir = dir + '/video';
     const imagesdir = dir + '/images';
     if(!fs.existsSync(dir)){
-
         fs.mkdirSync(dir);
         fs.mkdirSync(videodir);
         fs.mkdirSync(imagesdir);
@@ -54,30 +53,18 @@ function processVideo(url){
 
     logger.info('Video directory created at %s', dir);
 
-    youtubeDownloader.getRelevantVideoFrames(url, logger, (relevantFrames) => {
+    youtubeDownloader.getRelevantVideoFrames(url, logger).then((relevantFrames) => {
         logger.info('Begin processing relevant frames');
-
-        frameProcessor.processFrames(relevantFrames, logger, (res) => {
-            console.log("Result ", res);
-        });
+        return frameProcessor.processFrames(relevantFrames, logger);
+    }).then((processedFrames) => {
+        logger.info('Done');
+    }).catch((err) => {
+        logger.error('Error processing video url: ', url, ' err: ', err);
     });
 }
 
 processVideo('https://www.youtube.com/watch?v=VZvoufQy8qc');
 
-
-/*
-const testDir = './data/VZvoufQy8qc';
-const testVideoDir = testDir + '/video';
-
 //TODO: add multiple queries on same video
 //TODO: handle all errors
-
 //TODO use objects
-getFrames(testDir, testVideoDir + '/video.mp4', generateIntervalArray(), (relevantFrames) => {
-    //console.log("Result ", relevantFrames);
-    frameProcessor.processFrames(relevantFrames, (res) => {
-        console.log("Result ", res);
-    });
-});
-*/

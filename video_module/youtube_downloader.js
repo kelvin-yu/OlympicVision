@@ -9,7 +9,7 @@ const Frame = require('./frame.js');
 const Promise = require('bluebird');
 
 const properties = {
-    interval: 4,
+    interval: 2,
     startSeconds: 10,
     maxSeconds: 150,
     videoQuality : 22
@@ -29,10 +29,11 @@ function generateIntervalArray(){
     3. Processes frames and passes array into callback
     params:
         url : url of youtube video
-        cb : callback which has array parameter
+    returns:
+        promise
  */
 
-exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, logger, cb){
+exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, logger){
     const urlId =  url.substring(url.lastIndexOf('=') + 1, url.length);
     const dir = './data/' + urlId;
     const videodir = dir + '/video';
@@ -40,34 +41,37 @@ exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, logger, cb
     /* FOR TESTING PURPOSES
     */
 
-    if(fs.existsSync(videodir)){
+    if(fs.existsSync(videodir + '/video.mp4')){
         logger.info("Begin extracting frames from video");
-        getFrames(dir, videodir + '/video.mp4', generateIntervalArray(), logger, cb);
-        return;
+        return getFrames(dir, videodir + '/video.mp4', generateIntervalArray(), logger);
     }
 
     /* FOR TESTING PURPOSES
      */
 
-
     //Download youtube video
-    let video = ytdl(url, { quality: properties.videoQuality});
-    video.pipe(fs.createWriteStream(videodir + '/video.mp4'));
-    let percent = 0;
-    video.on('progress', (chunkLength, downloaded, total) => {
-        let cur = Math.ceil((downloaded / total * 100));
-        if(cur > percent){
-            percent = cur;
-            logger.info('Youtube video download progress: ', percent + '% ');
-        }
-    });
-    video.on('end', () => {
-        logger.info("Begin extracting frames from video");
-        //extract frames from downloaded video
-        //need to find out which is faster recursive one by one or iterative all at once
-        //getFramesRec(dir, videodir + '/video.mp4', generateIntervalArray(), 0);
-        getFrames(dir, videodir + '/video.mp4', generateIntervalArray(), logger, cb);
-    });
+    try{
+        let video = ytdl(url, { quality: properties.videoQuality});
+        video.pipe(fs.createWriteStream(videodir + '/video.mp4'));
+        let percent = 0;
+        video.on('progress', (chunkLength, downloaded, total) => {
+            let cur = Math.ceil((downloaded / total * 100));
+            if(cur > percent){
+                percent = cur;
+                logger.info('Youtube video download progress: ', percent + '% ');
+            }
+        });
+        video.on('end', () => {
+            logger.info("Begin extracting frames from video");
+            //extract frames from downloaded video
+            return getFrames(dir, videodir + '/video.mp4', generateIntervalArray(), logger);
+        });
+    }
+    catch(e){
+        logger.error('error downloading youtube video, err: ', e);
+        return Promise.reject(e);
+    }
+
 };
 
 /*
@@ -76,128 +80,74 @@ exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, logger, cb
     https://github.com/fluent-ffmpeg/node-fluent-ffmpeg/issues/449
 */
 
-function getFrames(dir, file, timestamps, logger, cb){
-    let relevantFrames = [];
-    let callbackCount = 0;
+const MAX_TOLERATED_FRAME_FAILURES = 20;
 
-    (function getFrame(i){
-        let imagesdir = dir + '/images';
-        let timestamp = timestamps[i];
-
-        //TODO add try catch
-        ffmpeg(file)
-            .on('end', function(){
-                let imagePath = imagesdir + '/' + timestamp + '.png';
-
-                //make sure screenshot exists
-                if(fs.existsSync(imagePath)){
-                    logger.info("Took frame at ", timestamp, " seconds");
-
-                    utils.queryOcr(imagePath, (err, response, responseBody) => {
-                        callbackCount++;
-                        if(err){
-                            logger.error("Error during OCR for image at %s ", imagePath, ' err: ', err);
-                            return;
-                        }
-                        let body = JSON.parse(responseBody);
-                        let frame = new Frame(timestamp, imagesdir, imagePath, body);
-
-                        //check if frame contains text
-                        if(body['regions'] && body['regions'].length > 0){
-                            logger.info('Relevant frame at %d seconds', frame.getTime());
-                            logger.debug('Frame data: ', frame);
-                            relevantFrames.push(frame);
-                        }
-
-                        if(callbackCount === timestamps.length){
-                            relevantFrames.sort((a, b) => {
-                                return a.getTime() - b.getTime();
-                            });
-                            logger.info("Found %d relevant frames", relevantFrames.length);
-                            logger.info('Timestamps of relevant frames', relevantFrames.map((frame) => {
-                                return frame.getTime();
-                            }));
-                            logger.debug("relevantFrames: ", relevantFrames);
-                            cb(relevantFrames);
-                        }
-                    });
-                }
-
-                //process next frame
-                if(i + 1 < timestamps.length){
-                    getFrame(i+1);
-                }
-            })
-            .screenshots({
-                count: 1,
-                timestamps: [timestamp],
-                filename: '%s.png',
-                folder: dir + '/images/',
-                size: '1920x1080'
-            });
-    })(0);
-}
-
-/*
- iteratively extract frames one by one
- because its way faster this way
- https://github.com/fluent-ffmpeg/node-fluent-ffmpeg/issues/449
-
-function getFrames(dir, file, timestamps, logger, cb){
-    let callbackCount = 0;
-    let numFrames = 0;
+function getFrames(dir, file, timestamps, logger){
     let relevantFrames = [];
     let imagesdir = dir + '/images';
-    for(let i = 0; i < timestamps.length; i++){
-        let timestamp = timestamps[i];
+    let callbackCount = 0;
+    let errorCount = 0;
 
+    return new Promise((resolve, reject) => {
+        (function getFrame(i){
+            let timestamp = timestamps[i];
 
-        ffmpeg(file)
-            .on('end', () => {
-                let imagePath = dir + '/images/' + timestamp + '.png';
+            try{
+                ffmpeg(file)
+                    .on('end', function(){
+                        let imagePath = imagesdir + '/' + timestamp + '.png';
 
-                //return if screenshot did not occur
-                if(!fs.existsSync(imagePath)) return;
+                        //make sure screenshot exists
+                        if(fs.existsSync(imagePath)){
+                            logger.info("Took frame at ", timestamp, " seconds");
 
-                numFrames++;
+                            utils.queryOcr(imagePath).then((responseBody) => {
+                                let body = JSON.parse(responseBody);
+                                let frame = new Frame(timestamp, imagesdir, imagePath, body);
+                                if(body['regions'] && body['regions'].length > 0){
+                                    logger.info('Relevant frame at %d seconds', frame.getTime());
+                                    logger.debug('Frame data: ', frame);
+                                    relevantFrames.push(frame);
+                                }
+                            }).catch((err) => {
+                                errorCount++;
+                                logger.error("Error during OCR for image at %s ", imagePath, ' err: ', err);
+                            }).finally(() => {
+                                if(errorCount > MAX_TOLERATED_FRAME_FAILURES){
+                                    reject("Exceeded MAX_TOLERATED_FRAME_FAILURES");
+                                }
+                                callbackCount++;
+                                if(callbackCount === timestamps.length){
+                                    relevantFrames.sort((a, b) => {
+                                        return a.getTime() - b.getTime();
+                                    });
+                                    logger.info("Found %d relevant frames", relevantFrames.length);
+                                    logger.info('Timestamps of relevant frames', relevantFrames.map((frame) => {
+                                        return frame.getTime();
+                                    }));
+                                    logger.debug("relevantFrames: ", relevantFrames);
+                                    resolve(relevantFrames);
+                                }
+                            });
+                        }
 
-                logger.info("Took frame at ", timestamp, " seconds");
-
-                utils.queryOcr(imagePath, (err, response, responseBody) => {
-                    callbackCount++;
-                    if(err){
-                        logger.error("Error during OCR for image at %s ", imagePath, ' err: ', err);
-                        return;
-                    }
-                    let body = JSON.parse(responseBody);
-                    let frame = new Frame(timestamp, imagesdir, imagePath, body);
-
-                    //check if frame contains text
-                    if(body['regions'] && body['regions'].length > 0){
-                        logger.info('Relevant frame at %d seconds', frame.getTime());
-                        logger.debug('Frame data: ', frame);
-                        relevantFrames.push(frame);
-                    }
-                    if(callbackCount === numFrames){
-                        relevantFrames.sort((a, b) => {
-                            return a.getTime() - b.getTime();
-                        });
-                        logger.info("Found %d relevant frames", numFrames);
-                        logger.info('Timestamps of relevant frames', relevantFrames.map((frame) => {
-                            return frame.getTime();
-                        }));
-                        logger.debug("relevantFrames: ", relevantFrames);
-                        cb(relevantFrames);
-                    }
-                });
-            })
-            .screenshots({
-                count: 1,
-                timestamps: [timestamp],
-                filename: '%s.png',
-                folder: dir + '/images/'
-            });
-    }
+                        //process next frame
+                        if(i + 1 < timestamps.length){
+                            getFrame(i+1);
+                        }
+                    })
+                    .screenshots({
+                        count: 1,
+                        timestamps: [timestamp],
+                        filename: '%s.png',
+                        folder: dir + '/images/',
+                        size: '1920x1080'
+                    });
+            }
+            catch(e){
+                logger.error('ffmpeg error, err: ', e);
+                reject(e);
+            }
+        })(0);
+    });
 }
-
- */

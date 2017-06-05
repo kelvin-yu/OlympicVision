@@ -5,39 +5,26 @@ const IMAGE_COUNT = 3;
 
 const Promise = require('bluebird');
 
-//callback (err, athlete)
-exports.getAthleteProfile = function getAthleteProfile(line, cb){
-    console.log('line1 ', line);
-    utils.bingWebSearch(line + " olympic wikipedia", (bingErr, bingResponseCode, bingResponseBody) => {
-        console.log('line2 ', line);
-        if(bingErr){
-            console.log("Bing err", bingErr);
-            cb(bingErr, null);
-            return;
-        }
-        let person = utils.removeDiacritics(getAthleteName(JSON.parse(bingResponseBody)));
-        if(person){
-            utils.bingImageSearch(person + ' olympic', (bingImageErr, bingImageResponseCode, bingImageResponseBody) => {
-                console.log('line3 ', line);
-                if(bingImageErr){
-                    console.log('Bing Image Error' , bingImageErr);
-                    cb(bingImageErr, null);
-                }
-                else{
-                    getAthleteImagesAndFaceIds(JSON.parse(bingImageResponseBody)).then((images) => {
-                        console.log('line4 ', line);
-                        let athlete = new Athlete(line, person, images, getAthleteWikipedia(JSON.parse(bingResponseBody)));
-                        cb(null, athlete);
-                    }).catch((err) => {
-                        console.log('getAthleteImagesAndFaceIds err: ', err);
-                        cb(err, null);
-                    });
-                }
-            });
-        }
-        else{
-            cb(null, false);
-        }
+exports.getAthleteProfile = function getAthleteProfile(line){
+    return new Promise((resolve, reject) => {
+        let person, outerBingResponseBody;
+        utils.bingWebSearch(line + " olympic wikipedia").then((bingResponseBody) => {
+            person = utils.removeDiacritics(getAthleteName(JSON.parse(bingResponseBody)));
+            outerBingResponseBody = bingResponseBody;
+            if(person){
+                return utils.bingImageSearch(person + ' olympic');
+            }
+            else{
+                resolve(false);
+            }
+        }).then((bingImageResponseBody) => {
+            return getAthleteImagesAndFaceIds(JSON.parse(bingImageResponseBody));
+        }).then((images) => {
+            let athlete = new Athlete(line, person, images, getAthleteWikipedia(JSON.parse(outerBingResponseBody)));
+            resolve(athlete);
+        }).catch((err) => {
+            reject(err);
+        });
     });
 };
 
@@ -48,7 +35,6 @@ function getAthleteImagesAndFaceIds(body){
     if(body && body['value']){
         for(let i = 0; i < IMAGE_COUNT && i < body['value'].length; i++){
             let url = body['value'][i]['contentUrl'];
-            console.log('url: ', url);
             images.push({url : url, faceIds : []});
             promises.push(utils.faceDetectUrl(url));
         }
