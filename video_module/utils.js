@@ -2,19 +2,12 @@
 
 const fs = require('fs');
 const secrets = require('./secrets.js');
+const config = require('./config.js');
 const easyimg = require('easyimage');
 const _request = require('request');
 const RateLimiter = require('limiter').RateLimiter;
-let limiter = new RateLimiter(5, 'second');
+let limiter = new RateLimiter(config.REQUESTS_PER_SECOND, 'second');
 const Promise = require('bluebird');
-
-const picWidth = 1920;
-const picHeight = 1080;
-const TOLERATED_VERIFY_CONFIDENCE = 0.5;
-const BACKOFF_TIME = 500;
-const TIMEOUT =  15000;
-
-//TODO refactor to remove all callback based functions, use promises only
 
 let backingOff = false;
 
@@ -26,12 +19,12 @@ function backOff(){
         setTimeout(function(){
             limiter.tokenBucket.tokensPerInterval = tokensPerInterval;
             backingOff = false;
-        }, BACKOFF_TIME);
+        }, config.BACKOFF_TIME);
     }
 }
 
 function request(options, cb){
-    options.timeout = TIMEOUT;
+    options.timeout = config.REQUEST_TIMEOUT;
     (function repeat(){
         limiter.removeTokens(1, function(){
             _request(options, function(err, response, body){
@@ -136,8 +129,8 @@ exports.crop = function crop(frame, savePath, leftX, leftY, rightX, rightY){
         easyimg.crop({
             src: frame.getImagePath(),
             dst: savePath,
-            x : centerX -(picWidth/2),
-            y : centerY - (picHeight/2),
+            x : centerX -(config.FRAME_PIC_WIDTH/2),
+            y : centerY - (config.FRAME_PIC_HEIGHT/2),
             cropwidth : width + 10,
             cropheight : height + 10
         }).then(
@@ -215,7 +208,7 @@ exports.faceVerify = function faceVerify(imagePath, athlete){
             })).each((res) => {
                if(res.isFulfilled()){
                     let confidence = Number(res.value()['confidence']);
-                    if(confidence >= TOLERATED_VERIFY_CONFIDENCE){
+                    if(confidence >= config.TOLERATED_VERIFY_CONFIDENCE){
                         result = true;
                     }
                }

@@ -2,6 +2,7 @@
 const fs = require('fs');
 const utils = require('./utils.js');
 const athleteProfiler = require('./athlete_profiler.js');
+const config = require('./config.js');
 
 const Promise = require('bluebird');
 
@@ -197,18 +198,10 @@ function getAllAthletesFromStartList(startListFrame, logger){
     });
 }
 
-const EDIT_DISTANCE_DIVISION = 5;
-const FACE_EDIT_DISTANCE_DIVISION = 3;
-//approximate location of name tag
-const leftX = 330;
-const leftY = 880;
-const rightX = 1600;
-const rightY = 1000;
-
 //Returns a promise for easy usage
 function findAthleteInFrame(athletes, frame, logger){
     return new Promise((resolve, reject) => {
-        utils.crop(frame, frame.getDir() + '/cropped_' + frame.getTime() + '.png', leftX, leftY, rightX, rightY).then((image) => {
+        utils.crop(frame, frame.getDir() + '/cropped_' + frame.getTime() + '.png', config.NAME_TAG_LOC.LEFTX, config.NAME_TAG_LOC.LEFTY, config.NAME_TAG_LOC.RIGHTX, config.NAME_TAG_LOC.RIGHTY).then((image) => {
             return utils.queryOcr(frame.getDir() + '/cropped_' + frame.getTime() + '.png');
         }).then((responseBody) => {
             let body = JSON.parse(responseBody);
@@ -237,12 +230,12 @@ function findAthleteInFrame(athletes, frame, logger){
                 }
             }
             //Primary match using OCR
-            if (minEditAthleteDistance <= Math.floor(minAthlete.getName().length / EDIT_DISTANCE_DIVISION)) {
+            if (minEditAthleteDistance <= Math.floor(minAthlete.getName().length / config.EDIT_DISTANCE_DIVISION)) {
                 logger.info('Athlete at %d seconds is %s', frame.getTime(), minAthlete.getName());
                 resolve(minAthlete);
             }
             //Secondary match using face recognition
-            else if (minAthlete && minEditAthleteDistance <= Math.floor(minAthlete.getName().length / FACE_EDIT_DISTANCE_DIVISION)) {
+            else if (minAthlete && minEditAthleteDistance <= Math.floor(minAthlete.getName().length / config.FACE_EDIT_DISTANCE_DIVISION)) {
                 logger.info('edit distance: ', minEditAthleteDistance, ' athlete name ', minAthlete.getName(), ' is very similar to ', body);
                 let p = utils.faceVerify(frame.getImagePath(), minAthlete).then((result) => {
                     if (result) {
@@ -250,7 +243,7 @@ function findAthleteInFrame(athletes, frame, logger){
                         resolve(minAthlete);
                         p.cancel();
                     }
-                    else if (secondMinAthlete && secondMinAthleteEditDistance <= Math.floor(secondMinAthlete.getName().length / FACE_EDIT_DISTANCE_DIVISION)) {
+                    else if (secondMinAthlete && secondMinAthleteEditDistance <= Math.floor(secondMinAthlete.getName().length / config.FACE_EDIT_DISTANCE_DIVISION)) {
                         logger.info('edit distance: ', secondMinAthleteEditDistance, ' athlete name ', secondMinAthlete.getName(), ' is very similar to ');
                         return utils.faceVerify(frame.getImagePath(), secondMinAthlete);
                     }
