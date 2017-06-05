@@ -5,34 +5,47 @@ const secrets = require('./secrets.js');
 const easyimg = require('easyimage');
 const _request = require('request');
 const RateLimiter = require('limiter').RateLimiter;
-let limiter = new RateLimiter(7, 'second');
+let limiter = new RateLimiter(5, 'second');
 const Promise = require('bluebird');
 
 const picWidth = 1920;
 const picHeight = 1080;
 const TOLERATED_VERIFY_CONFIDENCE = 0.5;
 const BACKOFF_TIME = 500;
+const TIMEOUT =  15000;
 
 //TODO refactor to remove all callback based functions, use promises only
 
 let backingOff = false;
 
+function backOff(){
+    if(!backingOff){
+        backingOff = true;
+        let tokensPerInterval = limiter.tokenBucket.tokensPerInterval;
+        limiter.tokenBucket.tokensPerInterval = 0;
+        setTimeout(function(){
+            limiter.tokenBucket.tokensPerInterval = tokensPerInterval;
+            backingOff = false;
+        }, BACKOFF_TIME);
+    }
+}
+
 function request(options, cb){
+    options.timeout = TIMEOUT;
     (function repeat(){
         limiter.removeTokens(1, function(){
             _request(options, function(err, response, body){
-                if(err) cb(err);
+                if(err){
+                    if(err.code === 'ETIMEDOUT' || err.code === 'ESOCKETTIMEDOUT'){
+                        repeat();
+                    }
+                    else{
+                        cb(err);
+                    }
+                }
                 else if(response.statusCode === 429){
                     //Back off requests for some some time
-                    if(!backingOff){
-                        backingOff = true;
-                        let tokensPerInterval = limiter.tokenBucket.tokensPerInterval;
-                        limiter.tokenBucket.tokensPerInterval = 0;
-                        setTimeout(function(){
-                            limiter.tokenBucket.tokensPerInterval = tokensPerInterval;
-                            backingOff = false;
-                        }, BACKOFF_TIME);
-                    }
+                    backOff();
                     repeat();
                 }
                 else if(response.statusCode !== 200){ //error
