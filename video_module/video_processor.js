@@ -3,6 +3,7 @@ const fs = require('fs');
 const youtubeDownloader = require('./youtube_downloader.js');
 const frameProcessor = require('./frame_processor');
 const moment = require('moment');
+const config = require('./config.js');
 
 const Promise = require('bluebird');
 

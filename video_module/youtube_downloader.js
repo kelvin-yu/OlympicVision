@@ -5,19 +5,13 @@ const ytdl = require('ytdl-core');
 const ffmpeg = require('fluent-ffmpeg');
 const utils = require('./utils.js');
 const Frame = require('./frame.js');
+const config = require('./config.js');
 
 const Promise = require('bluebird');
 
-const properties = {
-    interval: 2,
-    startSeconds: 10,
-    maxSeconds: 150,
-    videoQuality : 22
-};
-
 function generateIntervalArray(){
     let arr = [];
-    for(let i = properties.startSeconds; i <= properties.maxSeconds; i += properties.interval){
+    for(let i = config.Properties.StartSecond; i <= config.Properties.MaxSecond; i += config.Properties.FrameInterval){
         arr.push(i);
     }
     return arr;
@@ -51,7 +45,7 @@ exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, logger){
 
     //Download youtube video
     try{
-        let video = ytdl(url, { quality: properties.videoQuality});
+        let video = ytdl(url, { quality: config.Properties.VideoQuality});
         video.pipe(fs.createWriteStream(videodir + '/video.mp4'));
         let percent = 0;
         video.on('progress', (chunkLength, downloaded, total) => {

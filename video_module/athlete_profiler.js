@@ -1,7 +1,7 @@
 "use strict";
 const utils = require('./utils.js');
 const Athlete = require('./athlete.js');
-const IMAGE_COUNT = 3;
+const config = require('./config.js');
 
 const Promise = require('bluebird');
 
@@ -33,7 +33,7 @@ function getAthleteImagesAndFaceIds(body){
     let images = [];
     let promises = [];
     if(body && body['value']){
-        for(let i = 0; i < IMAGE_COUNT && i < body['value'].length; i++){
+        for(let i = 0; i < config.Properties.ATHLETE_IMAGE_COUNT && i < body['value'].length; i++){
             let url = body['value'][i]['contentUrl'];
             images.push({url : url, faceIds : []});
             promises.push(utils.faceDetectUrl(url));
