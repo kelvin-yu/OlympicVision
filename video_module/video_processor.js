@@ -42,14 +42,20 @@ function processVideo(url){
      });
 
     // set up directory structure
-    const dir = './data/' + urlId;
+    const base = './data/' + urlId;
+    let i = 0;
+
+    while(fs.existsSync(base + i)){
+        i++;
+    }
+
+    const dir = base + i;
     const videodir = dir + '/video';
     const imagesdir = dir + '/images';
-    if(!fs.existsSync(dir)){
-        fs.mkdirSync(dir);
-        fs.mkdirSync(videodir);
-        fs.mkdirSync(imagesdir);
-    }
+
+    fs.mkdirSync(dir);
+    fs.mkdirSync(videodir);
+    fs.mkdirSync(imagesdir);
 
     logger.info('Video directory created at %s', dir);
 
