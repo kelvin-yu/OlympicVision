@@ -27,6 +27,8 @@ function generateIntervalArray(){
         promise
  */
 
+
+
 exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, logger){
     const urlId =  url.substring(url.lastIndexOf('=') + 1, url.length);
     const dir = './data/' + urlId;
@@ -44,28 +46,33 @@ exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, logger){
      */
 
     //Download youtube video
-    try{
-        let video = ytdl(url, { quality: config.VIDEO_QUALITY});
-        video.pipe(fs.createWriteStream(videodir + '/video.mp4'));
-        let percent = 0;
-        video.on('progress', (chunkLength, downloaded, total) => {
-            let cur = Math.ceil((downloaded / total * 100));
-            if(cur > percent){
-                percent = cur;
-                logger.info('Youtube video download progress: ', percent + '% ');
-            }
-        });
-        video.on('end', () => {
-            logger.info("Begin extracting frames from video");
-            //extract frames from downloaded video
-            return getFrames(dir, videodir + '/video.mp4', generateIntervalArray(), logger);
-        });
-    }
-    catch(e){
-        logger.error('error downloading youtube video, err: ', e);
-        return Promise.reject(e);
-    }
-
+    return new Promise((resolve, reject) => {
+        try{
+            let video = ytdl(url, { quality: config.VIDEO_QUALITY});
+            video.pipe(fs.createWriteStream(videodir + '/video.mp4'));
+            let percent = 0;
+            video.on('progress', (chunkLength, downloaded, total) => {
+                let cur = Math.ceil((downloaded / total * 100));
+                if(cur > percent){
+                    percent = cur;
+                    logger.info('Youtube video download progress: ', percent + '% ');
+                }
+            });
+            video.on('end', () => {
+                logger.info("Begin extracting frames from video");
+                //extract frames from downloaded video
+                resolve();
+            });
+        }
+        catch(e){
+            logger.error('error downloading youtube video, err: ', e);
+            reject(e);
+        }
+    }).then(() => {
+        return getFrames(dir, videodir + '/video.mp4', generateIntervalArray(), logger);
+    }).catch((err) => {
+        return Promise.reject(err);
+    });
 };
 
 /*
@@ -135,7 +142,7 @@ function getFrames(dir, file, timestamps, logger){
                         timestamps: [timestamp],
                         filename: '%s.png',
                         folder: dir + '/images/',
-                        size: '1920x1080'
+                        size: String(config.FRAME_PIC_WIDTH) + 'x' + String(config.FRAME_PIC_HEIGHT)
                     });
             }
             catch(e){
