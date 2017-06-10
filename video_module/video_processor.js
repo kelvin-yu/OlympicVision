@@ -49,7 +49,7 @@ function processVideo(url){
         i++;
     }
 
-    const dir = base + i;
+    const dir = base + (i ? i : '');
     const videodir = dir + '/video';
     const imagesdir = dir + '/images';
 
