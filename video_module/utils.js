@@ -29,12 +29,16 @@ function request(options, cb){
         limiter.removeTokens(1, function(){
             _request(options, function(err, response, body){
                 if(err){
+                    //This doesn't really work yet. when retrying requests, the retried requests also never work
+                    /*
                     if(err.code === 'ETIMEDOUT' || err.code === 'ESOCKETTIMEDOUT'){
                         repeat();
                     }
                     else{
                         cb(err);
                     }
+                    */
+                    cb(err);
                 }
                 else if(response.statusCode === 429){
                     //Back off requests for some some time
@@ -113,7 +117,7 @@ exports.queryOcr = function queryOcr(imagePath){
 };
 
 //callback (image)
-exports.crop = function crop(frame, savePath, leftX, leftY, rightX, rightY){
+exports.crop = function crop(imagePath, savePath, leftX, leftY, rightX, rightY){
     /*
     console.log("Start frame leftX ", leftX);
     console.log("Start frame leftY ", leftY);
@@ -127,7 +131,7 @@ exports.crop = function crop(frame, savePath, leftX, leftY, rightX, rightY){
 
     return new Promise((resolve, reject) => {
         easyimg.crop({
-            src: frame.getImagePath(),
+            src: imagePath,
             dst: savePath,
             x : centerX -(config.FRAME_PIC_WIDTH/2),
             y : centerY - (config.FRAME_PIC_HEIGHT/2),

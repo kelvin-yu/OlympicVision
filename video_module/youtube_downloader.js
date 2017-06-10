@@ -97,15 +97,28 @@ function getFrames(dir, file, timestamps, logger){
                 ffmpeg(file)
                     .on('end', function(){
                         let imagePath = imagesdir + '/' + timestamp + '.png';
+                        let croppedImagePath = imagesdir + '/cropped_' + timestamp + '.png';
 
                         //make sure screenshot exists
                         if(fs.existsSync(imagePath)){
                             logger.info("Took frame at ", timestamp, " seconds");
 
-                            utils.queryOcr(imagePath).then((responseBody) => {
-                                let body = JSON.parse(responseBody);
-                                let frame = new Frame(timestamp, imagesdir, imagePath, body);
-                                if(body['regions'] && body['regions'].length > 0){
+                            let croppedFrameData;
+
+                            utils.crop(imagePath, croppedImagePath, config.NAME_TAG_LOC.LEFTX, config.NAME_TAG_LOC.LEFTY, config.NAME_TAG_LOC.RIGHTX, config.NAME_TAG_LOC.RIGHTY).then(() => {
+                                return utils.queryOcr(croppedImagePath);
+                            }).then((croppedResponseBody) => {
+                                croppedFrameData = JSON.parse(croppedResponseBody);
+                                if(croppedFrameData['regions'] && croppedFrameData['regions'].length > 0){ //there is something in cropped frame
+                                    return utils.queryOcr(imagePath);
+                                }
+                                else{ //there is nothing in the cropped frame
+                                    return Promise.resolve("{}");
+                                }
+                            }).then((responseBody) => {
+                                let frameData = JSON.parse(responseBody);
+                                let frame = new Frame(timestamp, imagesdir, imagePath, croppedImagePath, frameData, croppedFrameData);
+                                if(croppedFrameData['regions'] && croppedFrameData['regions'].length > 0){
                                     logger.info('Relevant frame at %d seconds', frame.getTime());
                                     logger.debug('Frame data: ', frame);
                                     relevantFrames.push(frame);
@@ -131,7 +144,9 @@ function getFrames(dir, file, timestamps, logger){
                                 }
                             });
                         }
-
+                        else{
+                            logger.warn('Missing frame at %d seconds', timestamp);
+                        }
                         //process next frame
                         if(i + 1 < timestamps.length){
                             getFrame(i+1);
