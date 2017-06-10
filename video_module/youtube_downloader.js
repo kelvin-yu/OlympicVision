@@ -29,9 +29,8 @@ function generateIntervalArray(){
 
 
 
-exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, logger){
+exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, dir, logger){
     const urlId =  url.substring(url.lastIndexOf('=') + 1, url.length);
-    const dir = './data/' + urlId;
     const videodir = dir + '/video';
 
     /* FOR TESTING PURPOSES
