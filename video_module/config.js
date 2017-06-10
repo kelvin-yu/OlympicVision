@@ -1,5 +1,5 @@
 module.exports = {
-    FRAME_INTERVAL: 4,   //interval between downloaded frames in seconds
+    FRAME_INTERVAL: 3,   //interval between downloaded frames in seconds
     START_SECOND: 10,    //second that frames start to download at
     MAX_SECOND: 150,     //max second that frames will be downloaded at
     VIDEO_QUALITY: 22,   //itag value of video resolution https://en.wikipedia.org/wiki/YouTube#Quality_and_formats

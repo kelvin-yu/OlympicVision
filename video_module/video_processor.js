@@ -43,13 +43,18 @@ function processVideo(url){
 
     // set up directory structure
     const base = './data/' + urlId;
-    let i = 0;
+    let dirNum = 0;
 
-    while(fs.existsSync(base + i)){
-        i++;
+    /* Removed for testing purposes
+    if(fs.existsSync(base)){
+        dirNum++;
+        while(fs.existsSync(base + dirNum)){
+            dirNum++;
+        }
     }
+    */
 
-    const dir = base + (i ? i : '');
+    const dir = base + (dirNum ? dirNum : '');
     const videodir = dir + '/video';
     const imagesdir = dir + '/images';
 
@@ -59,7 +64,7 @@ function processVideo(url){
 
     logger.info('Video directory created at %s', dir);
 
-    youtubeDownloader.getRelevantVideoFrames(url, logger).then((relevantFrames) => {
+    youtubeDownloader.getRelevantVideoFrames(url, dir, logger).then((relevantFrames) => {
         logger.info('Begin processing relevant frames');
         return frameProcessor.processFrames(relevantFrames, logger);
     }).then((processedFrames) => {
