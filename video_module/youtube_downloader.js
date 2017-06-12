@@ -50,6 +50,9 @@ exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, dir, logge
             let video = ytdl(url, { quality: config.VIDEO_QUALITY});
             video.pipe(fs.createWriteStream(videodir + '/video.mp4'));
             let percent = 0;
+            video.on('info', (info, format) => {
+                logger.info('Video length: ', info.length_seconds + ' seconds')
+            });
             video.on('progress', (chunkLength, downloaded, total) => {
                 let cur = Math.ceil((downloaded / total * 100));
                 if(cur > percent){
