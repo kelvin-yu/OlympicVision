@@ -6,7 +6,7 @@ const config = require('./config.js');
 const easyimg = require('easyimage');
 const _request = require('request');
 const RateLimiter = require('limiter').RateLimiter;
-let limiter = new RateLimiter(config.REQUESTS_PER_SECOND, 'second');
+let limiter = new RateLimiter(1, config.DELAY_PER_REQUEST);
 const Promise = require('bluebird');
 
 let backingOff = false;
@@ -26,20 +26,17 @@ function backOff(){
 function request(options, cb){
     options.timeout = config.REQUEST_TIMEOUT;
     options.agent = false;
-    (function repeat(){
+    (function repeat(count){
         limiter.removeTokens(1, function(){
             _request(options, function(err, response, body){
                 if(err){
-                    //This doesn't really work yet. when retrying requests, the retried requests also never work
-                    /*
+                    if(count >= config.MAX_TOLERATED_REQUEST_RETRY_FAILURES) cb(err);
                     if(err.code === 'ETIMEDOUT' || err.code === 'ESOCKETTIMEDOUT'){
                         repeat();
                     }
                     else{
                         cb(err);
                     }
-                    */
-                    cb(err);
                 }
                 else if(response.statusCode === 429){
                     //Back off requests for some some time
