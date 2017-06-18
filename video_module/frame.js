@@ -58,7 +58,7 @@ Frame.prototype.setCroppedData = function(croppedData){
 };
 
 Frame.prototype.getAthleteInFrame = function(){
-    return this.athleteInFrame;
+    return this._athleteInFrame;
 };
 
 Frame.prototype.setAthleteInFrame = function(athleteInFrame){

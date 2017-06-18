@@ -25,6 +25,7 @@ function backOff(){
 
 function request(options, cb){
     options.timeout = config.REQUEST_TIMEOUT;
+    options.agent = false;
     (function repeat(){
         limiter.removeTokens(1, function(){
             _request(options, function(err, response, body){
@@ -106,7 +107,7 @@ exports.queryOcr = function queryOcr(imagePath){
         file : fs.createReadStream(imagePath)
     };
     const options = {
-        url: 'https://eastus2.api.cognitive.microsoft.com/vision/v1.0/ocr?language=unk&detectOrientation=false',
+        url: 'https://eastus2.api.cognitive.microsoft.com/vision/v1.0/ocr?language=en&detectOrientation=false',
         headers: {
             'Ocp-Apim-Subscription-Key' : secrets.keys.ocr
         },
@@ -183,43 +184,45 @@ exports.faceVerify = function faceVerify(imagePath, athlete){
                 console.log('could not find any faces in', imagePath);
                 resolve(false);
             }
-            let promises = [];
-            for(let i = 0; i < faceLocalBody.length; ++i){
-                let faceLocalId = faceLocalBody[i]['faceId'];
-                for(let j = 0; j < athlete.getImages().length; ++j){
-                    let athleteImage = athlete.getImages()[j];
-                    for(let k = 0; k < athleteImage['faceIds'].length; k++){
-                        let faceAthleteId = athleteImage['faceIds'][k];
-                        const options = {
-                            url : 'https://eastus2.api.cognitive.microsoft.com/face/v1.0/verify',
-                            headers: {
-                                'Ocp-Apim-Subscription-Key' : secrets.keys.face
-                            },
-                            json : true,
-                            body : {
-                                faceId1 : faceLocalId,
-                                faceId2 : faceAthleteId
-                            },
-                            method: 'POST'
-                        };
-                        promises.push(requestPromise(options));
+            else{
+                let promises = [];
+                for(let i = 0; i < faceLocalBody.length; ++i){
+                    let faceLocalId = faceLocalBody[i]['faceId'];
+                    for(let j = 0; j < athlete.getImages().length; ++j){
+                        let athleteImage = athlete.getImages()[j];
+                        for(let k = 0; k < athleteImage['faceIds'].length; k++){
+                            let faceAthleteId = athleteImage['faceIds'][k];
+                            const options = {
+                                url : 'https://eastus2.api.cognitive.microsoft.com/face/v1.0/verify',
+                                headers: {
+                                    'Ocp-Apim-Subscription-Key' : secrets.keys.face
+                                },
+                                json : true,
+                                body : {
+                                    faceId1 : faceLocalId,
+                                    faceId2 : faceAthleteId
+                                },
+                                method: 'POST'
+                            };
+                            promises.push(requestPromise(options));
+                        }
                     }
                 }
-            }
-            let result = false;
-            Promise.all(promises.map((promise) => {
-                return promise.reflect();
-            })).each((res) => {
-               if(res.isFulfilled()){
-                    let confidence = Number(res.value()['confidence']);
-                    if(confidence >= config.TOLERATED_VERIFY_CONFIDENCE){
-                        result = true;
+                let result = false;
+                Promise.all(promises.map((promise) => {
+                    return promise.reflect();
+                })).each((res) => {
+                    if(res.isFulfilled()){
+                        let confidence = Number(res.value()['confidence']);
+                        if(confidence >= config.TOLERATED_VERIFY_CONFIDENCE){
+                            result = true;
+                        }
                     }
-               }
-            }).finally(() => {
-                console.log('result: ', result, ' imagepath: ', imagePath, ' athlete: ', athlete.getName());
-                resolve(result);
-            });
+                }).finally(() => {
+                    console.log('result: ', result, ' imagepath: ', imagePath, ' athlete: ', athlete.getName());
+                    resolve(result);
+                });
+            }
         }).catch((err) => {
             console.log('error in detecting face in ', imagePath, ' err: ', err);
             //Lets just assume faces don't match in the case that the request doesn't go through
@@ -236,6 +239,39 @@ exports.removeDiacritics = function removeDiacritics(str){
     }
     return str;
 };
+
+let Queue = function(){
+    this._oldestIndex = 1;
+    this._newestIndex = 1;
+    this._storage = {};
+    this.totalEnqueued = 0;
+};
+
+Queue.prototype.size = function(){
+    return this._newestIndex - this._oldestIndex;
+};
+
+Queue.prototype.enqueue = function(data){
+    this._storage[this._newestIndex] = data;
+    this._newestIndex++;
+    this.totalEnqueued++;
+};
+
+Queue.prototype.dequeue = function(){
+    let oldestIndex = this._oldestIndex,
+        newestIndex = this._newestIndex,
+        deletedData;
+
+    if (oldestIndex !== newestIndex){
+        deletedData = this._storage[oldestIndex];
+        delete this._storage[oldestIndex];
+        this._oldestIndex++;
+
+        return deletedData;
+    }
+};
+
+exports.Queue = Queue;
 
 const diacriticsRemovalMap = [
     {'base':'A', 'letters':/[\u0041\u24B6\uFF21\u00C0\u00C1\u00C2\u1EA6\u1EA4\u1EAA\u1EA8\u00C3\u0100\u0102\u1EB0\u1EAE\u1EB4\u1EB2\u0226\u01E0\u00C4\u01DE\u1EA2\u00C5\u01FA\u01CD\u0200\u0202\u1EA0\u1EAC\u1EB6\u1E00\u0104\u023A\u2C6F]/g},

@@ -9,12 +9,12 @@ const config = require('./config.js');
 
 const Promise = require('bluebird');
 
-function generateIntervalArray(){
-    let arr = [];
+function generateIntervalQueue(){
+    let q =  new utils.Queue();
     for(let i = config.START_SECOND; i <= config.MAX_SECOND; i += config.FRAME_INTERVAL){
-        arr.push(i);
+        q.enqueue(i);
     }
-    return arr;
+    return q;
 }
 
 /*
@@ -38,7 +38,7 @@ exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, dir, logge
 
     if(fs.existsSync(videodir + '/video.mp4')){
         logger.info("Begin extracting frames from video");
-        return getFrames(dir, videodir + '/video.mp4', generateIntervalArray(), logger);
+        return getFrames(dir, videodir + '/video.mp4', generateIntervalQueue(), logger);
     }
 
     /* FOR TESTING PURPOSES
@@ -68,7 +68,7 @@ exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, dir, logge
             reject(e);
         }
     }).then(() => {
-        return getFrames(dir, videodir + '/video.mp4', generateIntervalArray(), logger);
+        return getFrames(dir, videodir + '/video.mp4', generateIntervalQueue(), logger);
     }).catch((err) => {
         return Promise.reject(err);
     });
@@ -80,18 +80,15 @@ exports.getRelevantVideoFrames = function getRelevantVideoFrames(url, dir, logge
     https://github.com/fluent-ffmpeg/node-fluent-ffmpeg/issues/449
 */
 
-const MAX_TOLERATED_FRAME_FAILURES = 20;
-
-function getFrames(dir, file, timestamps, logger){
+function getFrames(dir, file, timestampsQueue, logger){
     let relevantFrames = [];
     let imagesdir = dir + '/images';
     let callbackCount = 0;
     let errorCount = 0;
+    let framesBeingProcessed = 1;
 
     return new Promise((resolve, reject) => {
-        (function getFrame(i){
-            let timestamp = timestamps[i];
-
+        (function getFrame(timestamp){
             try{
                 ffmpeg(file)
                     .on('end', function(){
@@ -126,11 +123,12 @@ function getFrames(dir, file, timestamps, logger){
                                 errorCount++;
                                 logger.error("Error during OCR for image at %s ", imagePath, ' err: ', err);
                             }).finally(() => {
-                                if(errorCount > MAX_TOLERATED_FRAME_FAILURES){
+                                if(errorCount > config.MAX_TOLERATED_FRAME_FAILURES){
                                     reject("Exceeded MAX_TOLERATED_FRAME_FAILURES");
                                 }
                                 callbackCount++;
-                                if(callbackCount === timestamps.length){
+                                if(callbackCount === timestampsQueue.totalEnqueued){
+                                    console.log('here');
                                     relevantFrames.sort((a, b) => {
                                         return a.getTime() - b.getTime();
                                     });
@@ -147,8 +145,10 @@ function getFrames(dir, file, timestamps, logger){
                             logger.warn('Missing frame at %d seconds', timestamp);
                         }
                         //process next frame
-                        if(i + 1 < timestamps.length){
-                            getFrame(i+1);
+                        framesBeingProcessed--;
+                        while(framesBeingProcessed < config.MAX_FRAMES_AT_SAME_TIME && timestampsQueue.size() > 0){
+                            framesBeingProcessed++;
+                            getFrame(timestampsQueue.dequeue());
                         }
                     })
                     .screenshots({
@@ -163,6 +163,6 @@ function getFrames(dir, file, timestamps, logger){
                 logger.error('ffmpeg error, err: ', e);
                 reject(e);
             }
-        })(0);
+        })(timestampsQueue.dequeue());
     });
 }
