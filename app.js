@@ -5,6 +5,7 @@ const logger = require('morgan');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 
+
 //var routes = require('./routes/index');
 //var users = require('./routes/users');
 
@@ -21,34 +22,6 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
-
-//app.use('/', routes);
-//app.use('/users', users);
-
-/*
-app.post('/analyze', function(req, res, next){
-  console.log("starting process at: " + req.body.url);
-  youtube_download.grabFrames(req.body.url, function(data){
-    console.log(data);
-    res.send(
-      [{name: 'Sui Lu', start: 193, end: 375},
-      {name: 'Catalina Ponor', start: 389, end: 566},
-      {name: 'Deng Linlin', start: 581, end: 779},
-      {name: 'Larisa Andreea Iordache', start: 800, end: 959},
-      {name: 'Kseniia Afanaseva', start: 972, end: 1162},
-      {name: 'Gabrielle Douglas', start: 1189, end: 1453},
-      {name: 'Victoria Komova', start: 1470, end: 1742},
-      {name: 'Alexandra Raisman', start: 1766, end: 1969}
-        ]
-    )
-  })
-});
-*/
-
-
-app.get('/', (req, res) => {
-  res.render('index');
-});
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

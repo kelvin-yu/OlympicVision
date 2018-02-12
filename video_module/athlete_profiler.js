@@ -1,6 +1,6 @@
 "use strict";
 const utils = require('./utils.js');
-const Athlete = require('./athlete.js');
+const Athlete = require('./model/athlete.js');
 const config = require('./config.js');
 
 const Promise = require('bluebird');

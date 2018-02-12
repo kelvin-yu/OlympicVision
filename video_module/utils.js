@@ -148,7 +148,6 @@ exports.crop = function crop(imagePath, savePath, leftX, leftY, rightX, rightY){
 
 //callback (err, responsecode, responsebody)
 exports.bingWebSearch = function bingWebSearch(query){
-    console.log('query: ', query);
     const options = {
         url: 'https://api.cognitive.microsoft.com/bing/v5.0/search?q=' + query + '&count=5&offset=0&mkt=en-us&safesearch=Moderate',
         headers: {

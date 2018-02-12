@@ -1,0 +1,26 @@
+<div class="text-center">
+    <img src="./img/olmgif.gif" alt="logo">
+    <h2 style="color:black; font-family:Quicksand, sans-serif;">Highlight Olympic Youtube Videos</h2>
+</div>
+
+<div class="text-center">
+
+    <form name="submit">
+
+        <label>
+            Youtube URL:
+            <input type="text" name="url" ng-model="url">
+        </label>
+
+        <input type="submit" ng-click="submitVideo(url)" value="Submit" />
+
+    </form>
+
+</div>
+
+<div class="text-center">
+    <small><em>No animation</em></small>
+    <uib-progressbar animate="false" value="dynamic" type="progress[0].type"><b>{{progress[0].value}}%</b></uib-progressbar>
+    <uib-progressbar animate="false" value="dynamic" type="progress[1].type"><b>{{progress[1].value}}%</b></uib-progressbar>
+    <uib-progressbar animate="false" value="dynamic" type="progress[2].type"><b>{{progress[2].value}}%</b></uib-progressbar>
+</div>

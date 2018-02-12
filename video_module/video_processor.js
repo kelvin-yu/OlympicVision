@@ -1,9 +1,10 @@
 const winston = require('winston');
 const fs = require('fs');
-const youtubeDownloader = require('./youtube_downloader.js');
-const frameProcessor = require('./frame_processor');
+const youtube_downloader = require('./youtube_downloader.js');
+const frame_processor = require('./frame_processor');
 const moment = require('moment');
 const config = require('./config');
+const io = require('../socket');
 
 const Promise = require('bluebird');
 
@@ -25,7 +26,7 @@ function squashAthleteInFrames(processedFrames){
 }
 
 //TODO move this to another file
-function processVideo(url){
+exports.processVideo = function(url, socketId){
     const urlId =  url.substring(url.lastIndexOf('=') + 1, url.length);
 
     // set up logger
@@ -35,7 +36,7 @@ function processVideo(url){
     //logger.remove(winston.transports.Console);
     logger.add(winston.transports.File, {
         name : 'info-file',
-        filename : './logs/' + loggerId,
+        filename : './video_module/logs/' + loggerId,
         json : false,
         level : 'info',
         formatter : function(options) {
@@ -48,7 +49,7 @@ function processVideo(url){
     });
     logger.add(winston.transports.File, {
         name : 'debug-file',
-        filename : './logs/' + loggerId + '_debug',
+        filename : './video_module/logs/' + loggerId + '_debug',
         json : false,
         level : 'debug',
         formatter : function(options) {
@@ -60,7 +61,7 @@ function processVideo(url){
      });
 
     // set up directory structure
-    const base = './data/' + urlId;
+    const base = './video_module/data/' + urlId;
     let dirNum = 0;
 
     /* Removed for testing purposes
@@ -84,18 +85,15 @@ function processVideo(url){
 
     logger.info('Video directory created at %s', dir);
 
-    youtubeDownloader.getRelevantVideoFrames(url, dir, logger).then((relevantFrames) => {
+    let youtubeDownloader = new youtube_downloader(logger, socketId);
+    let frameProcessor = new frame_processor(logger, socketId);
+
+    youtubeDownloader.getRelevantVideoFrames(url, dir).then((relevantFrames) => {
         logger.info('Begin processing relevant frames');
-        return frameProcessor.processFrames(relevantFrames, logger);
+        return frameProcessor.processFrames(relevantFrames);
     }).then((processedFrames) => {
         logger.info('Done processing frames');
-        //logger.info(processedFrames);
         let squashedFrames = squashAthleteInFrames(processedFrames);
-        /*
-        for(let frame of squashedFrames){
-            logger.info('Time: %d, athleteName: ', frame.getTime(), frame.getAthleteInFrame().getName());
-        }
-        */
         let result = [];
         for(let i = 0; i < squashedFrames.length - 1; i++) {
             let curFrame = squashedFrames[i];
@@ -105,13 +103,10 @@ function processVideo(url){
                 result.push({athlete : curFrame.getAthleteInFrame(), startTime : curFrame.getTime(), endTime : nextFrame.getTime()});
             }
         }
+        io.broadcastTo(socketId, 'progressUpdate', {value: 100, type: 'process'});
+        io.broadcastTo(socketId, 'processResult', result);
     }).catch((err) => {
         logger.error('Error processing video url: ', url, ' err: ', err);
     });
-}
+};
 
-processVideo('https://www.youtube.com/watch?v=VZvoufQy8qc');
-
-//TODO: add multiple queries on same video
-//TODO: handle all errors
-//TODO use objects

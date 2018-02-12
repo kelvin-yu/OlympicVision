@@ -3,12 +3,19 @@ const fs = require('fs');
 const utils = require('./utils.js');
 const athleteProfiler = require('./athlete_profiler.js');
 const config = require('./config.js');
+const io = require('../socket');
+
 
 const Promise = require('bluebird');
 
 Promise.config({
     cancellation: true,
 });
+
+let frameProcessor = function(logger, socketId){
+    this.logger = logger;
+    this.socketId = socketId;
+};
 
 function containsWord(body, word){
     if(body['regions']){
@@ -103,27 +110,27 @@ function findBeginAndEndStartListIndex(frames){
     return res;
 }
 
-function findStartList(frames, logger) {
+function findStartList(frames) {
     let beginAndEndIndex = findBeginAndEndStartListIndex(frames);
     if(!beginAndEndIndex) return false;
     let begin = beginAndEndIndex['begin'];
     let end = beginAndEndIndex['end'];
     let startListFrame = frames[Math.floor((end+begin)/2)];
-    logger.info("Found start frame at : ", startListFrame.getTime());
-    logger.debug('First start frame occurrence %d, last start frame occurrence %d', frames[begin].getTime(), frames[end].getTime());
+    this.logger.info("Found start frame at : ", startListFrame.getTime());
+    this.logger.debug('First start frame occurrence %d, last start frame occurrence %d', frames[begin].getTime(), frames[end].getTime());
     return startListFrame;
 }
 
-function getAllAthletesFromStartList(startListFrame, logger){
+function getAllAthletesFromStartList(startListFrame){
     let frameData = startListFrame.getData();
 
     let startLoc = containsWord(frameData, "start");
-    logger.debug("Found word 'start' in startlist frame at: " , startLoc);
+    this.logger.debug("Found word 'start' in startlist frame at: " , startLoc);
 
     let leftX = Number(startLoc.split(',')[0]);
     let leftY = Number(startLoc.split(',')[1]) + Number(startLoc.split(',')[3]);
     let regions = frameData['regions'];
-    logger.debug("Startlist frame regions: ", regions);
+    this.logger.debug("Startlist frame regions: ", regions);
     let rightX = leftX;
     let rightY = leftY;
     for(let i = 0; i < regions.length; i++){
@@ -140,12 +147,15 @@ function getAllAthletesFromStartList(startListFrame, logger){
             }
         }
     }
-    logger.info('Cropping start list frame at leftX: %d, leftY: %d, rightX: %d, rightY: %d', leftX, leftY, rightX, rightY);
+    this.logger.info('Cropping start list frame at leftX: %d, leftY: %d, rightX: %d, rightY: %d', leftX, leftY, rightX, rightY);
+
+    let that = this;
 
     return new Promise((resolve, reject) => {
         utils.crop(startListFrame.getImagePath(), startListFrame.getDir() + '/startlist.png', leftX, leftY, rightX, rightY).then((image) => {
-            logger.info('successfully cropped startlist');
-            logger.info('Begin OCR of startlist');
+            that.logger.info('successfully cropped startlist');
+            that.logger.info('Begin OCR of startlist');
+            io.broadcastTo(that.socketId, 'progressUpdate', {value: 10, type: 'process'});
 
             return utils.queryOcr(startListFrame.getDir() + '/startlist.png');
         }).then((responseBody) => {
@@ -161,45 +171,47 @@ function getAllAthletesFromStartList(startListFrame, logger){
                             else
                                 line += body['regions'][i]['lines'][j]['words'][k].text;
                         }
-                        logger.debug('Checking if %s is an athlete', line);
+                        that.logger.debug('Checking if %s is an athlete', line);
 
                         promises.push(athleteProfiler.getAthleteProfile(line));
                     }
                 }
                 Promise.all(promises).then((promiseAthletes) => {
+                    io.broadcastTo(that.socketId, 'progressUpdate', {value: 50, type: 'process'});
                     let athletes = [];
                     for (let i = 0; i < promiseAthletes.length; i++) {
                         let athlete = promiseAthletes[i];
                         if (athlete) {
-                            logger.info('%s is an athlete', athlete.getOcrName());
-                            logger.debug('Athlete profile: ', athlete);
+                            that.logger.info('%s is an athlete', athlete.getOcrName());
+                            that.logger.debug('Athlete profile: ', athlete);
                             athletes.push(athlete);
                         }
                     }
-                    logger.info('Found %d athletes', athletes.length);
-                    logger.info('Athlete names: ', athletes.map((athlete) => {
+                    that.logger.info('Found %d athletes', athletes.length);
+                    that.logger.info('Athlete names: ', athletes.map((athlete) => {
                         return athlete.getName();
                     }));
-                    logger.debug("athletes: ", athletes);
+                    that.logger.debug("athletes: ", athletes);
                     resolve(athletes);
                 }).catch((err) => {
-                    logger.error('error getting athlete profile: ', err);
+                    that.logger.error('error getting athlete profile: ', err);
                     reject(err);
                 });
             }
             else {
-                logger.error('No text was found for start list frame', startListFrame);
+                that.logger.error('No text was found for start list frame', startListFrame);
                 reject('Could not find any text in start list frame');
             }
         }).catch((err) => {
-            logger.error('Error in getAllAthletesFromStartList: ', err);
+            that.logger.error('Error in getAllAthletesFromStartList: ', err);
             reject(err);
         });
     });
 }
 
 //Returns a promise for easy usage
-function findAthleteInFrame(athletes, frame, logger){
+function findAthleteInFrame(athletes, frame){
+    let that = this;
     return new Promise((resolve, reject) => {
         let croppedFrameData = frame.getCroppedData();
         let minEditAthleteDistance = {distance: 1000, text: ''}; //text is the athlete name/part of name that gave the min distance
@@ -228,34 +240,34 @@ function findAthleteInFrame(athletes, frame, logger){
         }
         //Primary match using OCR
         if (minEditAthleteDistance.distance <= Math.floor(minEditAthleteDistance.text.length / config.EDIT_DISTANCE_DIVISION)) {
-            logger.info('Athlete at %d seconds is %s, editdistance %d', frame.getTime(), minAthlete.getName(), minEditAthleteDistance.distance);
+            that.logger.info('Athlete at %d seconds is %s, editdistance %d', frame.getTime(), minAthlete.getName(), minEditAthleteDistance.distance);
             resolve(minAthlete);
         }
         //Secondary match using face recognition
         else if (minAthlete && minEditAthleteDistance.distance <= Math.floor(minEditAthleteDistance.text.length / config.FACE_EDIT_DISTANCE_DIVISION)) {
-            logger.info('edit distance: ', minEditAthleteDistance.distance, ' athlete name ', minAthlete.getName(), ' is very similar to ', croppedFrameData);
+            that.logger.info('edit distance: ', minEditAthleteDistance.distance, ' athlete name ', minAthlete.getName(), ' is very similar to ', croppedFrameData);
             let p = utils.faceVerify(frame.getImagePath(), minAthlete).then((result) => {
                 if (result) {
-                    logger.info('Athlete at %d seconds is %s', frame.getTime(), minAthlete.getName());
+                    that.logger.info('Athlete at %d seconds is %s', frame.getTime(), minAthlete.getName());
                     resolve(minAthlete);
                     p.cancel();
                 }
                 else if (secondMinAthlete && secondMinAthleteEditDistance.distance <= Math.floor(secondMinAthleteEditDistance.text.length / config.FACE_EDIT_DISTANCE_DIVISION)) {
-                    logger.info('edit distance: ', secondMinAthleteEditDistance.distance, ' athlete name ', secondMinAthlete.getName(), ' is very similar to ');
+                    that.logger.info('edit distance: ', secondMinAthleteEditDistance.distance, ' athlete name ', secondMinAthlete.getName(), ' is very similar to ');
                     return utils.faceVerify(frame.getImagePath(), secondMinAthlete);
                 }
                 else {
-                    logger.info('No athlete found at %d seconds', frame.getTime());
+                    that.logger.info('No athlete found at %d seconds', frame.getTime());
                     resolve(null);
                     p.cancel();
                 }
             }).then((result) => {
                 if (result) {
-                    logger.info('Athlete at %d seconds is %s', frame.getTime(), secondMinAthlete.getName());
+                    that.logger.info('Athlete at %d seconds is %s', frame.getTime(), secondMinAthlete.getName());
                     resolve(secondMinAthlete);
                 }
                 else {
-                    logger.info('No athlete found at %d seconds', frame.getTime());
+                    that.logger.info('No athlete found at %d seconds', frame.getTime());
                     resolve(null);
                 }
             }).catch((err) => {
@@ -263,32 +275,34 @@ function findAthleteInFrame(athletes, frame, logger){
             });
         }
         else {
-            logger.info('No athlete found at %d seconds', frame.getTime());
+            that.logger.info('No athlete found at %d seconds', frame.getTime());
             resolve(null);
         }
     });
 }
 
-exports.processFrames = function processFrames(relevantFrames, logger){
+frameProcessor.prototype.processFrames = function(relevantFrames){
+    let that = this;
     return new Promise((resolve, reject) => {
-        getAllAthletesFromStartList(findStartList(relevantFrames, logger), logger).then((athletes) => {
+        getAllAthletesFromStartList.bind(this)(findStartList.bind(this)(relevantFrames)).then((athletes) => {
             let promises = [];
             let lastStartListFrame = findBeginAndEndStartListIndex(relevantFrames)['end'];
 
             for(let i = lastStartListFrame+1; i < relevantFrames.length; i++){
                 let frame = relevantFrames[i];
-                promises.push(findAthleteInFrame(athletes, frame, logger));
+                promises.push(findAthleteInFrame.bind(this)(athletes, frame));
             }
 
             Promise.all(promises).then((res) => {
-                logger.info('Processed frame results');
+                io.broadcastTo(that.socketId, 'progressUpdate', {value: 90, type: 'process'});
+                that.logger.info('Processed frame results');
                 for(let i = 0; i < res.length; i++){
                     relevantFrames[lastStartListFrame+1+i].setAthleteInFrame(res[i]);
                     if(res[i] !== null){
-                        logger.info('Athlete at %d seconds is %s', relevantFrames[lastStartListFrame+1+i].getTime(), res[i].getName());
+                        that.logger.info('Athlete at %d seconds is %s', relevantFrames[lastStartListFrame+1+i].getTime(), res[i].getName());
                     }
                     else{
-                        logger.info('No athlete found at %d seconds', relevantFrames[lastStartListFrame+1+i]. getTime());
+                        that.logger.info('No athlete found at %d seconds', relevantFrames[lastStartListFrame+1+i]. getTime());
                     }
                 }
                 resolve(relevantFrames.filter((frame) => {
@@ -297,13 +311,15 @@ exports.processFrames = function processFrames(relevantFrames, logger){
             })
             .catch((err) => {
                 //TODO ADD MAX TOLERATED FRAME FAILURES
-                logger.error('Error finding athlete in frame: ', err);
+                that.logger.error('Error finding athlete in frame: ', err);
                 reject(err);
             });
 
         }).catch((err) => {
-            logger.error('Error getting athletes from startlist: ', err);
+            that.logger.error('Error getting athletes from startlist: ', err);
             reject(err);
         });
     });
 };
+
+module.exports = frameProcessor;

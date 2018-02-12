@@ -19,10 +19,12 @@
     "limiter": "^1.1.0",
     "mocha": "^3.4.2",
     "moment": "^2.18.1",
+    "mongoose": "^5.0.4",
     "morgan": "~1.6.1",
     "request": "^2.81.0",
     "serve-favicon": "~2.3.0",
     "socket.io": "^2.0.1",
+    "tesseract.js": "^1.0.10",
     "winston": "^2.3.1",
     "ytdl-core": "^0.13.1"
   }
